@@ -1,96 +1,131 @@
-
 import customtkinter as ctk
 
-import gemini
-import paste
-import recording
+from services.gemini import Gemini
+from services.recording import Recorder
+from services.paste import AutoGui
+from services.db_oparation import DBOperator
 
 
-# アプリの初期設定
-ctk.set_appearance_mode("light")
+ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
 
-app = ctk.CTk()
-app.title("Gemini　AI薬歴")
-app.geometry("500x900")
-app.attributes('-topmost', True)
+class App(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+        self.db_operator = DBOperator()
+        self.gemini = Gemini()
+        self.recorder = Recorder()
+        self.autogui = AutoGui()
 
-# ======= ROW / COLUMN CONFIG ==========
-app.grid_columnconfigure(0, weight=1)
-app.grid_rowconfigure(0, weight=1)
+        self.title("Gemini　AI薬歴")
+        self.geometry("500x900")
+        self.attributes('-topmost', True)
 
+        # ★ ウィンドウ全体の grid 設定
+        # 横方向：col=0 を伸ばす（ただし中身のwidgetはstickyで制御）
+        self.grid_columnconfigure(0, weight=1)
+        # 縦方向：row=3（summaryのフレーム）だけ伸ばす
+        self.grid_rowconfigure(3, weight=1)
 
-# =======  ログ表示（スクロール付き） ==========
-log_label = ctk.CTkLabel(app, text="ログ：")
-log_label.grid(row=8, column=0, padx=10, pady=(10, 0), sticky="w")
+        self.btn_record_start = None
+        self.btn_record_stop = None
+        self.dropdown_label = None
+        self.dropdown = None
+        self.btn_registration_name = None
+        self.memo_label = None
+        self.memo_input_box = None
+        self.summary_label = None
+        self.summary_text_box = None
+        self.btn_paste = None
+        self.log_label = None
+        self.log_box = None
+        self.create_widgets()
 
-log_box = ctk.CTkTextbox(app, height=200)
-log_box.grid(row=9, column=0, padx=10, pady=10, sticky="nsew")
+    def create_widgets(self):
+        # ===== 録音ボタン =====
+        self.flame_btn_recorder = ctk.CTkFrame(self)
+        self.flame_btn_recorder.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-def log_write(text):
-    log_box.insert("end", text)
+        self.btn_record_start = ctk.CTkButton(
+            self.flame_btn_recorder,
+            text="録音",
+            command=self.recorder.recording_start,
+        )
+        self.btn_record_start.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
-# 関数
-def recording_start():
-    text = recording.recording_start()
-    log_write(text)
+        self.btn_record_stop = ctk.CTkButton(
+            self.flame_btn_recorder,
+            text="停止",
+            command=self.recorder.recording_stop,
+        )
+        self.btn_record_stop.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-def recording_stop():
-    text = recording.recording_stop()
-    log_write(text)
+        # ===== 名前一覧 =====
+        pharmacists_list = self.db_operator.load_pharmacists_list()
+        self.flame_pharmacists = ctk.CTkFrame(self)
+        self.flame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
-def summarize():
-    gemini.summarize()
+        self.dropdown_label = ctk.CTkLabel(self.flame_pharmacists, text="投薬者：")
+        self.dropdown_label.grid(row=0, column=0, padx=10, sticky="w")
 
-def auto_paste():
-    paste.auto_paste()
+        self.dropdown = ctk.CTkComboBox(self.flame_pharmacists, values=pharmacists_list)
+        # 横幅を固定にしたいなら sticky="w" にする
+        self.dropdown.grid(row=1, column=0, padx=10, sticky="w")
 
+        self.btn_registration_name = ctk.CTkButton(
+            self.flame_pharmacists,
+            text='投薬者登録',
+            command=self.db_operator.registration_name,
+        )
+        self.btn_registration_name.grid(row=1, column=1, padx=5, pady=5, sticky="w")
 
+        # ===== メモ =====
+        self.flame_memo = ctk.CTkFrame(self)
+        self.flame_memo.grid(row=2, column=0, padx=5, pady=5, sticky="w")
 
-# ======= 1. 録音・停止ボタン ==========
-frame_buttons = ctk.CTkFrame(app)
-frame_buttons.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
-frame_buttons.grid_columnconfigure((0, 1), weight=0)
+        self.memo_label = ctk.CTkLabel(self.flame_memo, text="メモ：")
+        self.memo_label.grid(row=0, column=0, padx=10, pady=(15, 0), sticky="w")
 
-btn_record = ctk.CTkButton(frame_buttons, text="録音")
-btn_record.grid(row=0, column=0, padx=5, pady=5)
+        self.memo_input_box = ctk.CTkEntry(self.flame_memo)
+        # 横幅も固定にしたいなら sticky="w"
+        self.memo_input_box.grid(row=1, column=0, padx=10, sticky="w")
 
-btn_stop = ctk.CTkButton(frame_buttons, text="停止")
-btn_stop.grid(row=0, column=1, padx=5, pady=5)
+        # ===== 要約（ここだけリサイズ対象） =====
+        self.flame_summary = ctk.CTkFrame(self)
+        self.flame_summary.grid(row=3, column=0, padx=10, pady=5, sticky="nsew")
+        self.flame_summary.grid_columnconfigure(0, weight=1)  # 横方向
+        self.flame_summary.grid_rowconfigure(1, weight=1)     # summary_text_box の行
 
-# ======= 2. ドロップダウン ==========
-dropdown_label = ctk.CTkLabel(app, text="選択：")
-dropdown_label.grid(row=1, column=0, padx=10, sticky="w")
+        self.summary_label = ctk.CTkLabel(self.flame_summary, text="テキスト入力：")
+        self.summary_label.grid(row=0, column=0, padx=10, pady=(15, 0), sticky="w")
 
-dropdown = ctk.CTkComboBox(app, values=["A", "B", "C"])
-dropdown.grid(row=2, column=0, padx=10, sticky="ew")
+        self.summary_text_box = ctk.CTkTextbox(self.flame_summary, height=150)
+        # ★ 横も縦も伸びてほしいので nsew
+        self.summary_text_box.grid(row=1, column=0, padx=10, sticky="nsew")
 
-# ======= 3. インプットボックス ==========
-input_label = ctk.CTkLabel(app, text="メモ：")
-input_label.grid(row=3, column=0, padx=10, pady=(15, 0), sticky="w")
+        self.btn_paste = ctk.CTkButton(
+            self.flame_summary,
+            text="自動ペースト",
+            command=self.autogui.paste,
+        )
+        self.btn_paste.grid(row=2, column=0, padx=5, pady=5, sticky="w")
 
-input_box = ctk.CTkEntry(app)
-input_box.grid(row=4, column=0, padx=10, sticky="ew")
+        # ===== ログ =====
+        self.flame_log = ctk.CTkFrame(self)
+        self.flame_log.grid(row=4, column=0, padx=5, pady=5, sticky="ew")
+        self.flame_log.grid_columnconfigure(0, weight=1)
 
-# ======= 4. テキストボックス（複数行） ==========
-text_label = ctk.CTkLabel(app, text="テキスト入力：")
-text_label.grid(row=5, column=0, padx=10, pady=(15, 0), sticky="w")
+        self.log_label = ctk.CTkLabel(self.flame_log, text="ログ：")
+        self.log_label.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="w")
 
-text_box = ctk.CTkTextbox(app, height=150)
-text_box.grid(row=6, column=0, padx=10, sticky="ew")
+        self.log_box = ctk.CTkTextbox(self.flame_log, height=100)
+        # 横も固定にしたいなら sticky="w"
+        self.log_box.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
 
-# ======= 5. ボタン2つ（実行、クリア） ==========
-frame_exec = ctk.CTkFrame(app)
-frame_exec.grid(row=7, column=0, padx=10, pady=10, sticky="ew")
-frame_exec.grid_columnconfigure((0, 1), weight=0)
-
-btn_run = ctk.CTkButton(frame_exec, text="実行")
-btn_run.grid(row=0, column=0, padx=5, pady=5)
-
-btn_clear = ctk.CTkButton(frame_exec, text="クリア")
-btn_clear.grid(row=0, column=1, padx=5, pady=5)
-
+    def log_write(self, text: str):
+        self.log_box.insert("end", text)
 
 
 if __name__ == "__main__":
+    app = App()
     app.mainloop()

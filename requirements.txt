@@ -1,0 +1,8 @@
+customtkinter==5.2.2
+google-genai==1.51.0
+numpy==2.3.5
+PyAutoGUI==0.9.54
+pyperclip==1.11.0
+sounddevice==0.5.3
+soundfile==0.13.1
+

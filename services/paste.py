@@ -1,8 +1,11 @@
+import platform
 import pyperclip
 import re
 import time
 
 import pyautogui
+
+from settings.setting import SECTION_MAPPING
 
 
 class PasteCancelledException(Exception):
@@ -11,8 +14,24 @@ class PasteCancelledException(Exception):
 
 class AutoGui:
     def __init__(self):
-        self.is_running = False
+        self.is_pasting = False
 
+    @staticmethod
+    def split_sections(text: str) -> dict:
+        """
+        【見出し】ごとに文章を分割して辞書にまとめる
+        key: 見出しの中身（例: "服薬状況"）
+        value: そのセクションの本文
+        """
+        pattern = r'【(.+?)】\s*([\s\S]*?)(?=\n*【.+?】|\Z)'
+        summary_dict = {}
+
+        for m in re.finditer(pattern, text):
+            title = m.group(1).strip()
+            body = m.group(2).strip()
+            summary_dict[title] = body
+
+        return summary_dict
 
     def paste(self, text):
         if not text:
@@ -20,14 +39,9 @@ class AutoGui:
         self.is_pasting = True
 
         try:
-            text_list = re.split(r'【(.*?)】', text)
-            command_dict = {}
-            for i in range(1, len(text_list), 2):
-                command_dict[text_list[i].strip()] = text_list[i + 1].strip()
-
-            def common_command(key, command):
-                # 実行前に必ず中断チェック
-                if not self.is_pasting:
+            def _common_command(key, section_title):
+                """コマンド入力　+　内容ペースト"""
+                if not self.is_pasting: # 実行前に必ず中断チェック
                     raise PasteCancelledException
 
                 pyautogui.hotkey('shift', ';', interval=0.1)
@@ -35,49 +49,48 @@ class AutoGui:
                 pyautogui.press('enter')
                 time.sleep(0.3)
 
-                pyperclip.copy(command_dict[command])
-                pyautogui.hotkey('command', 'v')
-                print(command_dict[command])
+                if section_title not in summary_dict:
+                    raise ValueError(f'「{section_title}」が見つかりません。')
+                pyperclip.copy(summary_dict[section_title])
+
+                if platform.system() == 'Darwin': # macOS
+                    pyautogui.hotkey('command', 'v')
+                else: # Windows / Linux
+                    pyautogui.hotkey('ctrl', 'v')
                 time.sleep(0.3)
                 pyautogui.press('enter')
                 time.sleep(0.3)
 
-            # pyautoguiによる自動操作
+            def _screen_target():
+                if not self.is_pasting:
+                    raise PasteCancelledException
+                # 画面サイズを取得し、ターゲット位置を計算
+                screen_width, screen_height = pyautogui.size()
+                target_x = int(screen_width / 10)
+                target_y = int(screen_height / 2 - 20)
 
-            # 画面サイズを取得し、ターゲット位置を計算
-            if not self.is_pasting:
-                raise PasteCancelledException
+                # マウスを指定位置に移動し、クリック
+                time.sleep(0.5)
+                pyautogui.moveTo(target_x, target_y)
+                pyautogui.doubleClick(target_x, target_y)
+                time.sleep(0.5)
 
-            screen_width, screen_height = pyautogui.size()
-            target_x = int(screen_width / 10)
-            target_y = int(screen_height / 2 - 20)
-            print(f"ターゲット位置に移動: X={target_x}, Y={target_y}")
+            summary_dict = self.split_sections(text)
+            _screen_target()
+            for key, section_title in SECTION_MAPPING:
+                _common_command(key, section_title)
 
-            # マウスを指定位置に移動し、クリック
-            time.sleep(0.5)
-            pyautogui.moveTo(target_x, target_y)
-            pyautogui.doubleClick(target_x, target_y)
-            time.sleep(0.5)
-
-            # コマンドシーケンスを順次実行（各ステップで中断チェック）
-            if not self.is_pasting:
-                raise PasteCancelledException
-
-            common_command('/', '服用状況')
-            common_command('*', '副作用')
-            common_command('7', '患者情報')
-            common_command('4', '指導')
-            common_command('k', '計画')
-
-            self.is_pasting = False
-            return {'status': 'error', 'message': '正常完了'}
+            return {'status': 'success', 'message': '自動ペーストが完了しました。'}
 
         except PasteCancelledException:
-            self.is_pasting = False
             return {'status': 'error', 'message': 'ペーストを中断しました。'}
 
         except Exception as e:
-            self.is_pasting = False
             return {'status': 'error', 'message': f'エラー：{e}'}
 
+        finally:
+            self.is_pasting = False
 
+    def cancel(self):
+        """外部からペースト処理を中断する"""
+        self.is_pasting = False

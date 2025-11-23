@@ -9,9 +9,9 @@ class Gemini:
     def __init__(self):
         self.client = genai.Client()
         self.prompt = setting.PROMPT
-        uploaded_file = None
 
     def summarize(self, recorded_file):
+        uploaded_file = None
         try:
             uploaded_file = self.client.files.upload(file=recorded_file)
             response = self.client.models.generate_content(

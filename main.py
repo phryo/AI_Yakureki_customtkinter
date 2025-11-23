@@ -165,6 +165,7 @@ class App(ctk.CTk):
             self.flame_load_summaries,
             width=200, height=30,
             text='要約の読み込み（日付指定）',
+            command=self.load_summaries_list
         )
         self.btn_load_summaries.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
@@ -328,6 +329,7 @@ class App(ctk.CTk):
                     args=(summarized_text, name, memo,),
                     daemon=True
                 )
+                self.db_thread.start()
 
         except Exception as e:
             self.after(0,self.log, f'要約エラー：{e}')

@@ -1,5 +1,7 @@
 from datetime import date
 import threading
+import tkinter
+import queue
 
 import customtkinter as ctk
 
@@ -25,7 +27,13 @@ class App(ctk.CTk):
         self.recorder = Recorder(self.recording_stop_event)
 
         self.gemini = Gemini()
-        self.gemini_thread = None
+        # ★ Gemini 用キュー & ワーカースレッド
+        self.gemini_queue = queue.Queue()
+        self.gemini_worker_thread = threading.Thread(
+            target=self._gemini_worker,
+            daemon=True
+        )
+        self.gemini_worker_thread.start()
 
         self.autogui = AutoGui()
 
@@ -227,9 +235,16 @@ class App(ctk.CTk):
         self.dropdown.set(name)
 
     def delete_name(self, name: str):
+        """投薬者の削除"""
         name = name.strip()
         if not name:
             self.log('削除する名前が選択されていません。')
+            return
+        possible_delete = tkinter.messagebox.askokcancel(
+            '確認',
+            '本当に削除してもよろしいですか？'
+        )
+        if not possible_delete:
             return
         self.db_operator.delete_name(name)
         self.log(f'{name}を削除しました。')
@@ -243,8 +258,9 @@ class App(ctk.CTk):
             self.dropdown.set('')
 
     def load_summaries_list(self):
+        """要約のリストをDBから読み込む"""
         # 例： '2025-11-23' という文字列が入っている
-        target_date = self.date_selector.get().strip()
+        target_date = (self.date_selector.get_date_str().strip())
 
         if target_date:
             summaries_list = self.db_operator.load_summary(target_date)
@@ -282,13 +298,17 @@ class App(ctk.CTk):
 
     def stop_recording(self):
         """
-        録音停止 -> gemini_thread開始
+        録音停止 → Gemini キューに追加
         """
         if not self.is_recording:
             return
+
         self.log('録音を停止しました。')
         self.is_recording = False
+
+        # 録音スレッドに停止合図
         self.recording_stop_event.set()
+
         if self.recording_thread is not None:
             self.recording_thread.join()
             self.recording_thread = None
@@ -296,15 +316,12 @@ class App(ctk.CTk):
         self.btn_record_stop.configure(state='disabled')
         self.btn_record_start.configure(state='normal')
 
-        recorded_file = self.recorder.recording_stop()
+        recorded_file = self.recorder.recording_stop() # stop_event をここで使わないなら引数無しにしてもOK
 
         if recorded_file.get('status') == 'success':
             file_path = recorded_file.get('file_path')
-            self.gemini_thread = threading.Thread(
-                target=self.gemini_task,
-                args=(file_path,),
-                daemon=True)
-            self.gemini_thread.start()
+            # self.log(f'Gemini 処理キューに追加しました: {file_path}')
+            self.gemini_queue.put(file_path)
         else:
             self.log(recorded_file.get('message'))
 
@@ -312,6 +329,24 @@ class App(ctk.CTk):
         """要約結果をテキストボックスに反映（メインスレッドで実行）"""
         self.summary_text_box.delete('1.0', 'end')
         self.summary_text_box.insert('1.0', text)
+
+    def _gemini_worker(self):
+        """Gemini 要約を順番に処理するワーカースレッド"""
+        while True:
+            # キューから次のファイルパスを取得（何もなければここで待機する）
+            file_path = self.gemini_queue.get()
+
+            try:
+                # 実際の Gemini 呼び出し
+                self.log(f'Gemini 要約を開始します: {file_path}')
+                self.gemini_task(file_path)
+                self.log(f'Gemini 要約が完了しました: {file_path}')
+            except Exception as e:
+                self.log(f'Gemini 要約中にエラー: {e}')
+            finally:
+                # キューに対して「1 個処理完了」と通知
+                self.gemini_queue.task_done()
+
 
     def gemini_task(self, recorded_file):
         """録音したファイルをGeminiに投げて要約する"""

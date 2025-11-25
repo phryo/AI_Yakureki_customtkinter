@@ -1,11 +1,12 @@
 import sqlite3
+import time
 from typing import Optional, List, Tuple
 
-from settings.setting import DB_NAME
+from settings.setting import DB_PATH
 
 class DBOperator:
-    def __init__(self, db_name: str = DB_NAME):
-        self.db_name = db_name
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_name = str(db_path)
         self._init_db()
         self.cleanup_old_summaries(days=7)
 
@@ -16,6 +17,11 @@ class DBOperator:
         """データベースを初期化し、テーブルを作成する"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
+
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            cursor.execute("PRAGMA synchronous=NORMAL;")
+            cursor.execute("PRAGMA busy_timeout=5000;")  # 5秒待つ（好みで調整）
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS names (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +40,25 @@ class DBOperator:
                 );
             """)
             conn.commit()
+
+    def _execute_with_retry(self, query: str, params: tuple = (), retries: int = 5, wait: float = 0.2):
+        """
+        database is locked が出たら少し待ってリトライする共通メソッド
+        """
+        for i in range(retries):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(query, params)
+                    conn.commit()
+                    return cursor  # 必要なら fetch は呼び出し側で
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    if i == retries - 1:
+                        raise  # リトライ回数オーバーなのでそのまま投げる
+                    time.sleep(wait)
+                else:
+                    raise
 
     def cleanup_old_summaries(self, days: int = 7) -> None:
         """
@@ -55,13 +80,10 @@ class DBOperator:
     # === 投薬者の操作 ===
     def add_name(self, name: str) -> None:
         """名前を追加"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO names (name) VALUES (?);",
-                (name,)
-            )
-            conn.commit()
+        self._execute_with_retry(
+            "INSERT INTO names (name) VALUES (?);",
+            (name,)
+        )
 
     def load_names_list(self) -> list[str]:
         """名前一覧を新しい順で取得"""
@@ -75,24 +97,19 @@ class DBOperator:
 
     def delete_name(self, name: str) -> None:
         """名前の削除"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
+        self._execute_with_retry(
                 "DELETE FROM names WHERE name = ?;",
                 (name,)
-            )
-            conn.commit()
+        )
+
 
     # === 要約の操作 ===
     def save_summary(self, content: str, name: Optional[str], memo: Optional[str]) -> None:
         """要約を保存"""
-        with self._get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO summaries (name, memo, content) VALUES (?, ?, ?);",
-                (name, memo, content)
-            )
-            conn.commit()
+        self._execute_with_retry(
+            "INSERT INTO summaries (name, memo, content) VALUES (?, ?, ?);",
+            (name, memo, content)
+        )
 
     def load_summary(self, target_date: Optional[str] = None) -> List[Tuple]:
         """

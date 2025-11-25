@@ -1,5 +1,13 @@
+import platform
+from pathlib import Path
+
+
 # db_operation.py
-DB_NAME = 'summaries.db'
+if platform.system() == "Windows":
+    DB_PATH_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
+    DB_PATH = DB_PATH_DIR / 'summaries.db'
+else:
+    DB_PATH = Path(__file__).resolve().parent.parent / 'summaries.db'
 
 # recording.py
 SAMPLERATE = 44100  # サンプリングレート

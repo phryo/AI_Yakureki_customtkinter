@@ -1,3 +1,4 @@
+import os
 from datetime import date
 import threading
 import tkinter
@@ -39,7 +40,7 @@ class App(ctk.CTk):
 
         self.title("Gemini　AI薬歴")
         self.geometry("500x900")
-        self.attributes('-topmost', True)
+        # self.attributes('-topmost', True)
 
         # ★ ウィンドウ全体の grid 設定
         # 横方向：col=0 を伸ばす（ただし中身のwidgetはstickyで制御）
@@ -47,11 +48,17 @@ class App(ctk.CTk):
         # 縦方向：row=4（summaryのフレーム）だけ伸ばす
         self.grid_rowconfigure(4, weight=1)
 
+        # 辞書、リスト
+        self.names_list = self.db_operator.load_names_list()
+        self.names_list.insert(0, '')
+
+        self.summaries_dict = {}
+
         # ウィジェット（上から順番）
         self.btn_record_start = None
         self.btn_record_stop = None
-        self.dropdown_label = None
-        self.dropdown = None
+        self.name_dropdown_label = None
+        self.name_dropdown = None
         self.btn_add_name = None
         self.btn_delete_name = None
         self.date_selector = None
@@ -95,23 +102,20 @@ class App(ctk.CTk):
 
 
         # ===== 名前一覧 =====
-        names_list = self.db_operator.load_names_list()
-        names_list.insert(0, '')
-
         self.flame_pharmacists = ctk.CTkFrame(self)
         self.flame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
         # 名前のドロップダウン
-        self.dropdown_label = ctk.CTkLabel(self.flame_pharmacists, text="投薬者")
-        self.dropdown_label.grid(row=0, column=0, padx=10, pady=(5, 0), sticky="w")
-        self.dropdown = ctk.CTkComboBox(self.flame_pharmacists, values=names_list)
-        self.dropdown.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="w")
+        self.name_dropdown_label = ctk.CTkLabel(self.flame_pharmacists, text="投薬者")
+        self.name_dropdown_label.grid(row=0, column=0, padx=10, pady=(5, 0), sticky="w")
+        self.name_dropdown = ctk.CTkComboBox(self.flame_pharmacists, values=self.names_list)
+        self.name_dropdown.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="w")
 
         # 名前新規追加
         self.btn_add_name = ctk.CTkButton(
             self.flame_pharmacists,
             text='投薬者登録',
-            command=lambda: self.add_name(self.dropdown.get()),
+            command=lambda: self.add_name(self.name_dropdown.get()),
             width=80, height=28,
         )
         self.btn_add_name.grid(row=1, column=1, padx=5, pady=5, sticky="w")
@@ -120,7 +124,7 @@ class App(ctk.CTk):
         self.btn_delete_name = ctk.CTkButton(
             self.flame_pharmacists,
             text='投薬者削除',
-            command=lambda: self.delete_name(self.dropdown.get()),
+            command=lambda: self.delete_name(self.name_dropdown.get()),
             width=80, height=28,
             fg_color="transparent",  # 背景なし
             border_color="#666666",
@@ -166,7 +170,11 @@ class App(ctk.CTk):
         self.flame_load_summaries = ctk.CTkFrame(self)
         self.flame_load_summaries.grid(row=3, column=0, padx=5, pady=5, sticky="w")
 
-        self.dropdown_summary = ctk.CTkComboBox(self.flame_load_summaries, values=summaries_title_list)
+        self.dropdown_summary = ctk.CTkComboBox(
+            self.flame_load_summaries,
+            values=summaries_title_list,
+            command=self.on_selected_summary
+        )
         self.dropdown_summary.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
         self.btn_load_summaries = ctk.CTkButton(
@@ -231,8 +239,8 @@ class App(ctk.CTk):
         self.log(f'{name}を追加しました。')
         names_list = self.db_operator.load_names_list()
         names_list.insert(0, '')
-        self.dropdown.configure(values=names_list)
-        self.dropdown.set(name)
+        self.name_dropdown.configure(values=names_list)
+        self.name_dropdown.set(name)
 
     def delete_name(self, name: str):
         """投薬者の削除"""
@@ -250,33 +258,42 @@ class App(ctk.CTk):
         self.log(f'{name}を削除しました。')
         names_list = self.db_operator.load_names_list()
         names_list.insert(0, '')
-        self.dropdown.configure(values=names_list)
+        self.name_dropdown.configure(values=names_list)
 
         if len(names_list) > 1:
-            self.dropdown.set(names_list[1])
+            self.name_dropdown.set(names_list[1])
         else:
-            self.dropdown.set('')
+            self.name_dropdown.set('')
 
     def load_summaries_list(self):
         """要約のリストをDBから読み込む"""
         # 例： '2025-11-23' という文字列が入っている
-        target_date = (self.date_selector.get_date_str().strip())
+        target_date = self.date_selector.get_date_str().strip()
+        name = self.name_dropdown.get()
 
         if target_date:
-            summaries_list = self.db_operator.load_summary(target_date)
+            summaries_list = self.db_operator.load_summary(target_date, name)
         else:
             today_str = date.today().strftime('%Y-%m-%d')
-            summaries_list = self.db_operator.load_summary(today_str)  # 全件
+            summaries_list = self.db_operator.load_summary(today_str, name)
+
+        self.summaries_dict = {
+            f"{created_at[5:].replace('-', '/')} / {memo or ''}": content
+            for (_id, _name, memo, content, created_at) in summaries_list
+        }
 
         # ドロップダウン表示用に整形
-        dropdown_values = [
-            f"{created_at} / {name or ''} / {memo or ''}"
-            for (_id, name, memo, _content, created_at) in summaries_list
-        ]
-        dropdown_values.insert(0, '')
+        dropdown_values = list(sorted(self.summaries_dict.keys()))
 
-        self.log(f'{target_date}の要約を読み込みました。')
+        self.log(f'{target_date} / {name}の要約を読み込みました。')
         self.dropdown_summary.configure(values=dropdown_values)
+
+    def on_selected_summary(self, selected_label: str):
+        """ドロップダウンで要約を選択したときに呼ばれる"""
+        content = self.summaries_dict.get(selected_label, "")
+
+        self.summary_text_box.delete("1.0", "end")
+        self.summary_text_box.insert("end", content)
 
     def start_recording(self):
         """threadにて録音開始 """
@@ -292,7 +309,6 @@ class App(ctk.CTk):
 
         self.recording_thread = threading.Thread(
             target=self.recorder.recording_start,
-            args=(self.recording_stop_event,),
             daemon=True)
         self.recording_thread.start()
 
@@ -338,15 +354,16 @@ class App(ctk.CTk):
 
             try:
                 # 実際の Gemini 呼び出し
-                self.log(f'Gemini 要約を開始します: {file_path}')
+                self.log(f'Gemini 要約を開始します。')
                 self.gemini_task(file_path)
-                self.log(f'Gemini 要約が完了しました: {file_path}')
+                self.log(f'Gemini 要約が完了しました。')
+                if os.path.exists(file_path):
+                    os.remove(file_path)
             except Exception as e:
                 self.log(f'Gemini 要約中にエラー: {e}')
             finally:
                 # キューに対して「1 個処理完了」と通知
                 self.gemini_queue.task_done()
-
 
     def gemini_task(self, recorded_file):
         """録音したファイルをGeminiに投げて要約する"""
@@ -355,10 +372,12 @@ class App(ctk.CTk):
 
             if result.get('status') == 'success':
                 summarized_text = result.get('summary')
-                name = self.dropdown.get().strip()
-                memo = self.memo_input_box.get().strip()
+                name = str(self.name_dropdown.get())
+                memo = str(self.memo_input_box.get())
+                if memo in ('', '0'):
+                    memo = None
                 self.after(0, self._update_summary_text, summarized_text)
-                self.after(0, self.log, '要約が完了しました。')
+
                 self.db_thread = threading.Thread(
                     target=self.db_operator.save_summary,
                     args=(summarized_text, name, memo,),

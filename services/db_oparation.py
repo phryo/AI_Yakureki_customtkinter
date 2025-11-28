@@ -111,32 +111,39 @@ class DBOperator:
             (name, memo, content)
         )
 
-    def load_summary(self, target_date: Optional[str] = None) -> List[Tuple]:
+    def load_summary(self, target_date: Optional[str] = None, name: Optional[str] = None) -> List[Tuple]:
         """
         要約のリストを取得
-        :param target_date:'YYYY-MM-DD' 形式の文字列。Noneなら
+        :param target_date:'YYYY-MM-DD' 形式の文字列。Noneなら日付条件なし
+        :param name: 名前で絞り込みたい場合の文字列。Noneなら名前条件なし。
         """
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            if target_date:
-                cursor.execute(
-                    """
-                    SELECT id, name, memo, content, created_at
-                    FROM summaries 
-                    WHERE date(created_at) = date(?) 
-                    order by created_at DESC;
-                    """,
-                    (target_date,)
-                )
-            else:
-                cursor.execute(
-                    """
-                    SELECT id, name, memo, content, created_at
-                    FROM summaries
-                    ORDER BY created_at DESC;
-                    """
-                )
+            base_query = """
+                SELECT id, name, memo, content, created_at
+                FROM summaries
+            """
 
+            conditions = []
+            params: list = []
+
+            # 日付条件
+            if target_date:
+                conditions.append("date(created_at) = date(?)")
+                params.append(target_date)
+
+            # 名前条件
+            if name:
+                conditions.append("name = ?")
+                params.append(name)
+
+            if conditions:
+                query = base_query + " WHERE " + " AND ".join(conditions)
+            else:
+                query = base_query
+            query += " ORDER BY created_at DESC;"
+
+            cursor.execute(query, params)
             rows = cursor.fetchall()
         return rows

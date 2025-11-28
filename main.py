@@ -170,7 +170,7 @@ class App(ctk.CTk):
         self.flame_load_summaries = ctk.CTkFrame(self)
         self.flame_load_summaries.grid(row=3, column=0, padx=5, pady=5, sticky="w")
 
-        self.dropdown_summary = ctk.CTkComboBox(
+        self.dropdown_summary = settings.widgets.CenteredDropdown(
             self.flame_load_summaries,
             values=summaries_title_list,
             command=self.on_selected_summary
@@ -286,7 +286,7 @@ class App(ctk.CTk):
         dropdown_values = list(sorted(self.summaries_dict.keys()))
 
         self.log(f'{target_date} / {name}の要約を読み込みました。')
-        self.dropdown_summary.configure(values=dropdown_values)
+        self.dropdown_summary.configure_values(dropdown_values)
 
     def on_selected_summary(self, selected_label: str):
         """ドロップダウンで要約を選択したときに呼ばれる"""

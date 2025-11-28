@@ -16,7 +16,12 @@ DTYPE = 'int16'  # データ型
 WAVE_OUTPUT_FILENAME = 'recording.wav'  # 保存ファイル名
 
 # prompt.txt
-with open('prompt.txt', 'r', encoding='utf-8') as f:
+if platform.system() == "Windows":
+    PROMPT_FILE_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
+    PROMPT_FILE_PATH = PROMPT_FILE_DIR / 'prompt.txt'
+else:
+    PROMPT_FILE_PATH = Path(__file__).resolve().parent.parent / 'prompt.txt'
+with open(PROMPT_FILE_PATH, 'r', encoding='utf-8') as f:
     PROMPT = f.read()
 
 # paste.py

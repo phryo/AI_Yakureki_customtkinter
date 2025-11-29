@@ -180,7 +180,7 @@ class App(ctk.CTk):
         self.btn_load_summaries = ctk.CTkButton(
             self.flame_load_summaries,
             width=200, height=30,
-            text='要約の読み込み（日付指定）',
+            text='要約の読み込み（日付、名前指定）',
             command=self.load_summaries_list
         )
         self.btn_load_summaries.grid(row=0, column=1, padx=5, pady=5, sticky="w")
@@ -365,54 +365,54 @@ class App(ctk.CTk):
                 # キューに対して「1 個処理完了」と通知
                 self.gemini_queue.task_done()
 
-    # def gemini_task(self, recorded_file):
-    #     """録音したファイルをGeminiに投げて要約する"""
-    #     try:
-    #         result = self.gemini.summarize(recorded_file)
-    #
-    #         if result.get('status') == 'success':
-    #             summarized_text = result.get('summary')
-    #             name = str(self.name_dropdown.get())
-    #             memo = str(self.memo_input_box.get())
-    #             if memo in ('', '0'):
-    #                 memo = None
-    #             self.after(0, self._update_summary_text, summarized_text)
-    #
-    #             self.db_thread = threading.Thread(
-    #                 target=self.db_operator.save_summary,
-    #                 args=(summarized_text, name, memo,),
-    #                 daemon=True
-    #             )
-    #             self.db_thread.start()
-    #
-    #     except Exception as e:
-    #         self.after(0,self.log, f'要約エラー：{e}')
-
-    def gemini_task(self, recorded_file) -> bool:
+    def gemini_task(self, recorded_file):
+        """録音したファイルをGeminiに投げて要約する"""
         try:
-            # もし self.gemini.client.host みたいな形でエンドポイントが取れるなら print
-            try:
-                host = getattr(self.gemini, "host", None)
-                if host:
-                    self.log(f"Gemini host = {repr(host)}")
-            except Exception:
-                pass
-
             result = self.gemini.summarize(recorded_file)
 
+            if result.get('status') == 'success':
+                summarized_text = result.get('summary')
+                name = str(self.name_dropdown.get())
+                memo = str(self.memo_input_box.get())
+                if memo in ('', '0'):
+                    memo = None
+                self.after(0, self._update_summary_text, summarized_text)
+
+                self.db_thread = threading.Thread(
+                    target=self.db_operator.save_summary,
+                    args=(summarized_text, name, memo,),
+                    daemon=True
+                )
+                self.db_thread.start()
+
         except Exception as e:
-            # ここで会社PC特有のエラー内容をログに出す
-            self.log(f"Gemini への接続に失敗しました: {repr(e)}")
-            return False
+            self.after(0,self.log, f'要約エラー：{e}')
 
-        if not result or result.get('status') != 'success':
-            self.log(f"Gemini 要約失敗: {result}")
-            return False
-
-        summarized_text = result.get('summary', '')
-        # 要約結果をUIに反映
-        self.after(0, self._update_summary_text, summarized_text)
-        return True
+    # def gemini_task(self, recorded_file) -> bool:
+    #     try:
+    #         # もし self.gemini.client.host みたいな形でエンドポイントが取れるなら print
+    #         try:
+    #             host = getattr(self.gemini, "host", None)
+    #             if host:
+    #                 self.log(f"Gemini host = {repr(host)}")
+    #         except Exception:
+    #             pass
+    #
+    #         result = self.gemini.summarize(recorded_file)
+    #
+    #     except Exception as e:
+    #         # ここで会社PC特有のエラー内容をログに出す
+    #         self.log(f"Gemini への接続に失敗しました: {repr(e)}")
+    #         return False
+    #
+    #     if not result or result.get('status') != 'success':
+    #         self.log(f"Gemini 要約失敗: {result}")
+    #         return False
+    #
+    #     summarized_text = result.get('summary', '')
+    #     # 要約結果をUIに反映
+    #     self.after(0, self._update_summary_text, summarized_text)
+    #     return True
 
     def auto_paste(self):
         text = self.summary_text_box.get('1.0', 'end-1c')

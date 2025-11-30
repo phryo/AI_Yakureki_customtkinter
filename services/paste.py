@@ -1,4 +1,5 @@
 import platform
+import pygetwindow as gw
 import pyperclip
 import re
 import time
@@ -64,6 +65,16 @@ class AutoGui:
             def _screen_target():
                 if not self.is_pasting:
                     raise PasteCancelledException
+
+                # 調剤システムを最前面にアクティブ化
+                windows = gw.getWindowsWithTitle('調剤システム')
+                if windows:
+                    win = windows[0]
+                    win.activate()
+                    time.sleep(0.5)
+                else:
+                    raise Exception
+
                 # 画面サイズを取得し、ターゲット位置を計算
                 screen_width, screen_height = pyautogui.size()
                 target_x = int(screen_width / 10)

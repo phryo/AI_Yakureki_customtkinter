@@ -147,3 +147,10 @@ class DBOperator:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         return rows
+
+    def update_summary(self, summary_id, content: str) -> None:
+        """修正した後の要約を更新して保存"""
+        self._execute_with_retry(
+            "UPDATE summaries SET content = ? where id ?;",
+            (content, summary_id)
+        )

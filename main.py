@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import date
 import threading
 import tkinter
@@ -22,10 +23,17 @@ class App(ctk.CTk):
         self.db_operator = DBOperator()
         self.db_thread = None
 
+        self.bind("<F1>", self.on_f1)
+
         self.is_recording = False
         self.recording_thread = None
         self.recording_stop_event = threading.Event()
         self.recorder = Recorder(self.recording_stop_event)
+
+        self.record_start_time = None
+        self.record_time_seconds = 0
+        self.record_timer_id = None
+        self.max_record_seconds = 300
 
         self.gemini = Gemini()
         # ★ Gemini 用キュー & ワーカースレッド
@@ -57,6 +65,7 @@ class App(ctk.CTk):
         # ウィジェット（上から順番）
         self.btn_record_start = None
         self.btn_record_stop = None
+        self.lbl_time = None
         self.name_dropdown_label = None
         self.name_dropdown = None
         self.btn_add_name = None
@@ -84,7 +93,7 @@ class App(ctk.CTk):
 
         self.btn_record_start = ctk.CTkButton(
             self.flame_btn_recorder,
-            text="録音",
+            text="録音(F1)",
             command=self.start_recording,
             width=100, height=40
         )
@@ -93,13 +102,18 @@ class App(ctk.CTk):
         # 録音停止ボタン
         self.btn_record_stop = ctk.CTkButton(
             self.flame_btn_recorder,
-            text="停止",
+            text="停止(F1)",
             state='disabled',
             command=self.stop_recording,
             width=100, height=40
         )
         self.btn_record_stop.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
+        # 録音時間表示ラベル
+        self.lbl_timer = ctk.CTkLabel(
+            self.flame_btn_recorder,
+            text='00:00'
+        )
 
         # ===== 名前一覧 =====
         self.flame_pharmacists = ctk.CTkFrame(self)
@@ -225,6 +239,15 @@ class App(ctk.CTk):
 
 
     # ====== 関数 ======
+    def on_f1(self, event=None):
+        self.toggle_recording()
+
+    def toggle_recording(self):
+        if self.is_recording:
+            self.stop_recording()
+        else:
+            self.start_recording()
+
     def log(self, text: str):
         """ログ出力"""
         self.log_box.insert("1.0", f'{text}\n')
@@ -278,22 +301,29 @@ class App(ctk.CTk):
             summaries_list = self.db_operator.load_summary(today_str, name)
 
         self.summaries_dict = {
-            f"{created_at[5:].replace('-', '/')} / {memo or ''}": content
+            f"{created_at[5:].replace('-', '/')} / {memo or ''}": {
+                "id": _id,
+                "content": content}
             for (_id, _name, memo, content, created_at) in summaries_list
         }
 
         # ドロップダウン表示用に整形
-        dropdown_values = list(sorted(self.summaries_dict.keys()))
+        dropdown_values = list(sorted(self.summaries_dict.keys(), reverse=True))
 
         self.log(f'{target_date} / {name}の要約を読み込みました。')
         self.dropdown_summary.configure_values(dropdown_values)
 
     def on_selected_summary(self, selected_label: str):
         """ドロップダウンで要約を選択したときに呼ばれる"""
-        content = self.summaries_dict.get(selected_label, "")
+        data = self.summaries_dict.get(selected_label)
+        if not data:
+            self.log('要約データが取得できませんでした。')
+            return
+        selected_id = data.get("id")
+        selected_content = self.summaries_dict.get(selected_label, "")
 
         self.summary_text_box.delete("1.0", "end")
-        self.summary_text_box.insert("end", content)
+        self.summary_text_box.insert("end", selected_content)
 
     def start_recording(self):
         """threadにて録音開始 """
@@ -303,6 +333,11 @@ class App(ctk.CTk):
         self.log('録音を開始します。')
         self.is_recording = True
         self.recording_stop_event.clear()
+
+        self.record_start_time = time.time()
+        self.record_time_seconds = 0
+        self.update_timer_label()
+        self.start_timer()
 
         self.btn_record_start.configure(state='disabled')
         self.btn_record_stop.configure(state='normal')
@@ -340,6 +375,39 @@ class App(ctk.CTk):
             self.gemini_queue.put(file_path)
         else:
             self.log(recorded_file.get('message'))
+
+    # 録音タイマー関連
+    def start_timer(self):
+        """1秒ごとに録音時間を更新するループを開始"""
+        # すぐに一回実行
+        self.update_record_time()
+
+    def update_record_time(self):
+        """録音時間を計算してラベルに反映し、次の after を予約"""
+        if not self.is_recording or self.record_start_time is None:
+            return
+
+        now = time.time()
+        self.record_time_seconds = int(now - self.record_start_time)
+
+        # ラベル更新
+        self.update_timer_label()
+
+        # 🎯 タイムアウト機能（必要なら）
+        if self.max_record_seconds > 0 and self.record_time_seconds >= self.max_record_seconds:
+            print("タイムアウトにより録音停止")
+            self.stop_recording()
+            return
+
+        # 1秒後にまた呼ぶ
+        self.record_timer_id = self.after(1000, self.update_record_time)
+
+    def update_timer_label(self):
+        """record_time_seconds を mm:ss 形式にして表示"""
+        sec = self.record_time_seconds
+        minutes = sec // 60
+        seconds = sec % 60
+        self.lbl_timer.configure(text=f"{minutes:02d}:{seconds:02d}")
 
     def _update_summary_text(self, text: str):
         """要約結果をテキストボックスに反映（メインスレッドで実行）"""

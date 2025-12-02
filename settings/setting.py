@@ -3,11 +3,16 @@ from pathlib import Path
 
 
 # db_operation.py
-if platform.system() == "Windows":
-    DB_PATH_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
-    DB_PATH = DB_PATH_DIR / 'summaries.db'
-else:
-    DB_PATH = Path(__file__).resolve().parent.parent / 'summaries.db'
+# try:
+#     if platform.system() == "Windows":
+#         DB_PATH_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
+#         DB_PATH = DB_PATH_DIR / 'summaries.db'
+#     else:
+#         DB_PATH = Path(__file__).resolve().parent.parent / 'summaries.db'
+# except:
+#     DB_PATH = Path(__file__).resolve().parent / 'summaries.db'
+DB_PATH = r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter\summaries.db"
+
 
 # recording.py
 SAMPLERATE = 44100  # サンプリングレート
@@ -16,17 +21,12 @@ DTYPE = 'int16'  # データ型
 WAVE_OUTPUT_FILENAME = 'recording.wav'  # 保存ファイル名
 
 # prompt.txt
-# if platform.system() == "Windows":
-#     PROMPT_FILE_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
-#     PROMPT_FILE_PATH = PROMPT_FILE_DIR / 'prompt.txt'
-# else:
-#     PROMPT_FILE_PATH = Path(__file__).resolve().parent.parent / 'prompt.txt'
 with open('prompt.txt', 'r', encoding='utf-8') as f:
     PROMPT = f.read()
 
 # paste.py
 SECTION_MAPPING = [
-    ('/', '服用状況'),
+    ('/', '服薬状況'),
     ('*', '体調変化'),
     ('7', 'S/O（患者）'),
     ('4', 'A/P（指導）'),

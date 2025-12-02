@@ -212,7 +212,7 @@ class CenteredDropdown(ctk.CTkFrame):
     """
 
     def __init__(self, master, values=None, width=160,
-                 command=None, max_rows=5, **kwargs):
+                 command=None, max_rows=9, **kwargs):
         super().__init__(master, **kwargs)
 
         self.values = list(values) if values is not None else []
@@ -334,7 +334,7 @@ class CenteredDropdown(ctk.CTkFrame):
         inner_height = item_height * visible_rows  # ← 中身（行ぶん）の高さ
 
         # 上下の余白・枠ぶんちょっと足す
-        extra_padding = 6  # ここを増やすと上下の余裕が増える
+        extra_padding = 7  # ここを増やすと上下の余裕が増える
         visible_height = inner_height + extra_padding
 
         # ポップアップの位置（選択中の行がボタンの位置付近になるように）

@@ -11,6 +11,7 @@ from services.gemini import Gemini
 from services.recording import Recorder
 from services.paste import AutoGui
 from services.db_oparation import DBOperator
+import settings.setting
 import settings.widgets
 
 
@@ -33,7 +34,7 @@ class App(ctk.CTk):
         self.record_start_time = None
         self.record_time_seconds = 0
         self.record_timer_id = None
-        self.max_record_seconds = 300
+        self.max_record_seconds = settings.setting.MAX_RECORDING_SECONDS
 
         self.gemini = Gemini()
         # ★ Gemini 用キュー & ワーカースレッド
@@ -62,10 +63,13 @@ class App(ctk.CTk):
 
         self.summaries_dict = {}
 
+        self.current_summary_id = None
+        self.selected_current_content = None
+
         # ウィジェット（上から順番）
         self.btn_record_start = None
         self.btn_record_stop = None
-        self.lbl_time = None
+        self.lbl_timer = None
         self.name_dropdown_label = None
         self.name_dropdown = None
         self.btn_add_name = None
@@ -78,6 +82,7 @@ class App(ctk.CTk):
         self.summary_label = None
         self.summary_text_box = None
         self.btn_paste = None
+        self.btn_update_summary = None
         self.log_label = None
         self.log_box = None
 
@@ -88,12 +93,15 @@ class App(ctk.CTk):
         UI作成
         """
         # ===== 録音ボタン =====
-        self.flame_btn_recorder = ctk.CTkFrame(self)
-        self.flame_btn_recorder.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.frame_btn_recorder = ctk.CTkFrame(self)
+        self.frame_btn_recorder.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
         self.btn_record_start = ctk.CTkButton(
-            self.flame_btn_recorder,
+            self.frame_btn_recorder,
             text="録音(F1)",
+            fg_color="#1f6aa5",  # 通常時の色
+            hover_color="#144870",
+            text_color="white",
             command=self.start_recording,
             width=100, height=40
         )
@@ -101,9 +109,9 @@ class App(ctk.CTk):
 
         # 録音停止ボタン
         self.btn_record_stop = ctk.CTkButton(
-            self.flame_btn_recorder,
+            self.frame_btn_recorder,
             text="停止(F1)",
-            state='disabled',
+            state="disabled",
             command=self.stop_recording,
             width=100, height=40
         )
@@ -111,24 +119,25 @@ class App(ctk.CTk):
 
         # 録音時間表示ラベル
         self.lbl_timer = ctk.CTkLabel(
-            self.flame_btn_recorder,
-            text='00:00'
+            self.frame_btn_recorder,
+            text="00:00"
         )
+        self.lbl_timer.grid(row=0, column=2, padx=20, pady=5, sticky="w")
 
         # ===== 名前一覧 =====
-        self.flame_pharmacists = ctk.CTkFrame(self)
-        self.flame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.frame_pharmacists = ctk.CTkFrame(self)
+        self.frame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
         # 名前のドロップダウン
-        self.name_dropdown_label = ctk.CTkLabel(self.flame_pharmacists, text="投薬者")
+        self.name_dropdown_label = ctk.CTkLabel(self.frame_pharmacists, text="投薬者")
         self.name_dropdown_label.grid(row=0, column=0, padx=10, pady=(5, 0), sticky="w")
-        self.name_dropdown = ctk.CTkComboBox(self.flame_pharmacists, values=self.names_list)
+        self.name_dropdown = ctk.CTkComboBox(self.frame_pharmacists, values=self.names_list)
         self.name_dropdown.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="w")
 
         # 名前新規追加
         self.btn_add_name = ctk.CTkButton(
-            self.flame_pharmacists,
-            text='投薬者登録',
+            self.frame_pharmacists,
+            text="投薬者登録",
             command=lambda: self.add_name(self.name_dropdown.get()),
             width=80, height=28,
         )
@@ -136,7 +145,7 @@ class App(ctk.CTk):
 
         # 名前削除
         self.btn_delete_name = ctk.CTkButton(
-            self.flame_pharmacists,
+            self.frame_pharmacists,
             text='投薬者削除',
             command=lambda: self.delete_name(self.name_dropdown.get()),
             width=80, height=28,
@@ -150,22 +159,22 @@ class App(ctk.CTk):
 
 
         # ===== メモ =====
-        self.flame_memo = ctk.CTkFrame(self)
-        self.flame_memo.grid(row=2, column=0, padx=5, pady=5, sticky="w")
-        self.flame_memo.grid_columnconfigure(1, weight=1)
+        self.frame_memo = ctk.CTkFrame(self)
+        self.frame_memo.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.frame_memo.grid_columnconfigure(1, weight=1)
 
         self.date_selector = settings.widgets.DateSelector(
-            self.flame_memo,
+            self.frame_memo,
             retention_days=7,
         )
         self.date_selector.grid(row=0, column=0, columnspan=2, padx=10, pady=(5, 5), sticky="w")
 
-        self.memo_label = ctk.CTkLabel(self.flame_memo, text="メモ：")
+        self.memo_label = ctk.CTkLabel(self.frame_memo, text="メモ：")
         self.memo_label.grid(row=1, column=0, padx=(10, 5), pady=5, sticky="w")
 
         self.memo_input_box = settings.widgets.NumberEntry(
-            self.flame_memo,
-            placeholder_text='メモ',
+            self.frame_memo,
+            placeholder_text="メモ",
             min_value=0,
             max_value=500,
             step=1
@@ -174,67 +183,76 @@ class App(ctk.CTk):
 
 
         # ===要約再読み込み===
-        summaries_list = self.db_operator.load_summary()
+        today_str = date.today().strftime('%Y-%m-%d')
+        summaries_list = self.db_operator.load_summary(today_str)
         summaries_title_list = [
-            f"{created_at} / {name or ''} / {memo or ''}"
+            f"{created_at} | {memo or ''}"
             for (_id, name, memo, _content, created_at) in summaries_list
         ]
-        summaries_title_list.insert(0, '')
 
-        self.flame_load_summaries = ctk.CTkFrame(self)
-        self.flame_load_summaries.grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        self.frame_load_summaries = ctk.CTkFrame(self)
+        self.frame_load_summaries.grid(row=3, column=0, padx=5, pady=5, sticky="w")
 
         self.dropdown_summary = settings.widgets.CenteredDropdown(
-            self.flame_load_summaries,
+            self.frame_load_summaries,
             values=summaries_title_list,
             command=self.on_selected_summary
         )
         self.dropdown_summary.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
         self.btn_load_summaries = ctk.CTkButton(
-            self.flame_load_summaries,
+            self.frame_load_summaries,
             width=200, height=30,
-            text='要約の読み込み（日付、名前指定）',
+            text="要約の読み込み（日付、名前指定）",
             command=self.load_summaries_list
         )
         self.btn_load_summaries.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
 
         # ===== 要約（ここだけリサイズ対象） =====
-        self.flame_summary = ctk.CTkFrame(self)
-        self.flame_summary.grid(row=4, column=0, padx=5, pady=5, sticky="nsew")
-        self.flame_summary.grid_columnconfigure(0, weight=1)  # 横方向
-        self.flame_summary.grid_rowconfigure(1, weight=1)     # summary_text_box の行
+        self.frame_summary = ctk.CTkFrame(self)
+        self.frame_summary.grid(row=4, column=0, padx=5, pady=5, sticky="nsew")
+        self.frame_summary.grid_columnconfigure(0, weight=1)  # 横方向
+        self.frame_summary.grid_rowconfigure(1, weight=1)     # summary_text_box の行
 
-        self.summary_label = ctk.CTkLabel(self.flame_summary, text="要約：")
+        self.summary_label = ctk.CTkLabel(self.frame_summary, text="要約：")
         self.summary_label.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="w")
 
-        self.summary_date_text_box = ctk.CTkLabel(
-            self.flame_summary,
-            text=summaries_title_list[0]
-        )
-        self.summary_date_text_box.grid(row=0, column=1, padx=5, pady=(5, 0), sticky="w")
-
-        self.summary_text_box = ctk.CTkTextbox(self.flame_summary, height=150)
+        self.summary_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
         self.summary_text_box.grid(row=1, column=0, padx=10, sticky="nsew")
 
+        self.frame_btn_in_summary = ctk.CTkFrame(self.frame_summary,
+                                                 fg_color="transparent",
+                                                 border_width=0,)
+        self.frame_btn_in_summary.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+
+        # 自動ペーストボタン
         self.btn_paste = ctk.CTkButton(
-            self.flame_summary,
+            self.frame_btn_in_summary,
             text="自動ペースト",
-            command=self.auto_paste,
+            command=self.auto_paste
         )
-        self.btn_paste.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.btn_paste.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+
+        # 要約保存ボタン
+        self.btn_update_summary = ctk.CTkButton(
+            self.frame_btn_in_summary,
+            text="保存",
+            width=50,
+            command=self.update_summary
+        )
+        self.btn_update_summary.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
 
         # ===== ログ =====
-        self.flame_log = ctk.CTkFrame(self)
-        self.flame_log.grid(row=5, column=0, padx=5, pady=5, sticky="ew")
-        self.flame_log.grid_columnconfigure(0, weight=1)
+        self.frame_log = ctk.CTkFrame(self)
+        self.frame_log.grid(row=5, column=0, padx=5, pady=5, sticky="ew")
+        self.frame_log.grid_columnconfigure(0, weight=1)
 
-        self.log_label = ctk.CTkLabel(self.flame_log, text="ログ：")
+        self.log_label = ctk.CTkLabel(self.frame_log, text="ログ：")
         self.log_label.grid(row=0, column=0, padx=10, pady=(5, 0), sticky="w")
 
-        self.log_box = ctk.CTkTextbox(self.flame_log, height=100)
+        self.log_box = ctk.CTkTextbox(self.frame_log, height=100)
         self.log_box.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="ew")
 
 
@@ -248,11 +266,13 @@ class App(ctk.CTk):
         else:
             self.start_recording()
 
+    # ログ表示
     def log(self, text: str):
         """ログ出力"""
         self.log_box.insert("1.0", f'{text}\n')
         self.log_box.update()
 
+    # 投薬者関連
     def add_name(self, name: str):
         name = name.strip()
         if not name:
@@ -288,6 +308,7 @@ class App(ctk.CTk):
         else:
             self.name_dropdown.set('')
 
+    # 要約関連
     def load_summaries_list(self):
         """要約のリストをDBから読み込む"""
         # 例： '2025-11-23' という文字列が入っている
@@ -319,12 +340,29 @@ class App(ctk.CTk):
         if not data:
             self.log('要約データが取得できませんでした。')
             return
-        selected_id = data.get("id")
-        selected_content = self.summaries_dict.get(selected_label, "")
+
+        self.current_summary_id = data.get("id")
+        selected_current_content = data.get("content")
 
         self.summary_text_box.delete("1.0", "end")
-        self.summary_text_box.insert("end", selected_content)
+        self.summary_text_box.insert("end", selected_current_content)
 
+    def _update_summary_text(self, text: str):
+        """要約結果をテキストボックスに反映（メインスレッドで実行）"""
+        self.summary_text_box.delete('1.0', 'end')
+        self.summary_text_box.insert('1.0', text)
+
+    def update_summary(self):
+        summary_id = self.current_summary_id
+        current_content = self.summary_text_box.get("1.0", "end-1c")
+        self.db_thread = threading.Thread(
+            target=self.db_operator.update_summary,
+            args=(summary_id, current_content,),
+            daemon=True
+        )
+        self.db_thread.start()
+
+    # 録音関連
     def start_recording(self):
         """threadにて録音開始 """
         if self.is_recording:
@@ -339,7 +377,11 @@ class App(ctk.CTk):
         self.update_timer_label()
         self.start_timer()
 
-        self.btn_record_start.configure(state='disabled')
+        self.btn_record_start.configure(state='disabled',
+                                        text="録音中...",
+                                        fg_color="#fff799",  # オレンジ
+                                        hover_color="#fff799",
+                                        )
         self.btn_record_stop.configure(state='normal')
 
         self.recording_thread = threading.Thread(
@@ -357,6 +399,8 @@ class App(ctk.CTk):
         self.log('録音を停止しました。')
         self.is_recording = False
 
+        self.lbl_timer.configure(text='00:00')
+
         # 録音スレッドに停止合図
         self.recording_stop_event.set()
 
@@ -365,7 +409,11 @@ class App(ctk.CTk):
             self.recording_thread = None
 
         self.btn_record_stop.configure(state='disabled')
-        self.btn_record_start.configure(state='normal')
+        self.btn_record_start.configure(state='normal',
+                                        text="録音(F1)",
+                                        fg_color="#1f6aa5",
+                                        hover_color="#144870",
+                                        )
 
         recorded_file = self.recorder.recording_stop() # stop_event をここで使わないなら引数無しにしてもOK
 
@@ -394,8 +442,8 @@ class App(ctk.CTk):
         self.update_timer_label()
 
         # 🎯 タイムアウト機能（必要なら）
-        if self.max_record_seconds > 0 and self.record_time_seconds >= self.max_record_seconds:
-            print("タイムアウトにより録音停止")
+        if 0 < self.max_record_seconds <= self.record_time_seconds:
+            self.log("タイムアウトにより録音停止")
             self.stop_recording()
             return
 
@@ -409,11 +457,7 @@ class App(ctk.CTk):
         seconds = sec % 60
         self.lbl_timer.configure(text=f"{minutes:02d}:{seconds:02d}")
 
-    def _update_summary_text(self, text: str):
-        """要約結果をテキストボックスに反映（メインスレッドで実行）"""
-        self.summary_text_box.delete('1.0', 'end')
-        self.summary_text_box.insert('1.0', text)
-
+    # Gemini関連
     def _gemini_worker(self):
         """Gemini 要約を順番に処理するワーカースレッド"""
         while True:
@@ -482,8 +526,10 @@ class App(ctk.CTk):
     #     self.after(0, self._update_summary_text, summarized_text)
     #     return True
 
+    # 自動ペースト
     def auto_paste(self):
         text = self.summary_text_box.get('1.0', 'end-1c')
+        self.update_summary()
         self.log('自動ペーストしています。')
         result = self.autogui.paste(text)
         if result.get('status') == 'success':

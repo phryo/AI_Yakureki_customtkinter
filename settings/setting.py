@@ -2,17 +2,16 @@ import platform
 from pathlib import Path
 
 
-# db_operation.py
-# try:
-#     if platform.system() == "Windows":
-#         DB_PATH_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
-#         DB_PATH = DB_PATH_DIR / 'summaries.db'
-#     else:
-#         DB_PATH = Path(__file__).resolve().parent.parent / 'summaries.db'
-# except:
-#     DB_PATH = Path(__file__).resolve().parent / 'summaries.db'
-DB_PATH = r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter\summaries.db"
+if platform.system() == "Windows":
+    BASE_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
 
+# db_operation.py
+DB_PATH = BASE_DIR / 'summaries.db'
+PROMPT_PATH = BASE_DIR / 'prompt.txt'
+
+# DB_PATH = r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter\summaries.db"
 
 # recording.py
 SAMPLERATE = 44100  # サンプリングレート
@@ -20,8 +19,10 @@ CHANNELS = 1  # チャンネル数
 DTYPE = 'int16'  # データ型
 WAVE_OUTPUT_FILENAME = 'recording.wav'  # 保存ファイル名
 
+MAX_RECORDING_SECONDS = 300
+
 # prompt.txt
-with open('prompt.txt', 'r', encoding='utf-8') as f:
+with PROMPT_PATH.open('r', encoding='utf-8') as f:
     PROMPT = f.read()
 
 # paste.py

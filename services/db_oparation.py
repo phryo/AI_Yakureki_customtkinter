@@ -11,14 +11,17 @@ class DBOperator:
         self.cleanup_old_summaries(days=7)
 
     def _get_connection(self):
-        return sqlite3.connect(self.db_name, timeout=10)
+        conn = sqlite3.connect(self.db_name, timeout=10)
+        conn.execute("PRAGMA busy_timeout=5000;")
+        return conn
 
     def _init_db(self):
         """データベースを初期化し、テーブルを作成する"""
         with self._get_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("PRAGMA journal_mode=WAL;")
+            # 共有フォルダでは WAL を使わず、通常のジャーナルにする
+            cursor.execute("PRAGMA journal_mode=DELETE;")
             cursor.execute("PRAGMA synchronous=NORMAL;")
             cursor.execute("PRAGMA busy_timeout=5000;")  # 5秒待つ（好みで調整）
 
@@ -41,7 +44,7 @@ class DBOperator:
             """)
             conn.commit()
 
-    def _execute_with_retry(self, query: str, params: tuple = (), retries: int = 5, wait: float = 0.2):
+    def _execute_with_retry(self, query: str, params: tuple = (), retries: int = 5, wait: float = 0.2) -> None:
         """
         database is locked が出たら少し待ってリトライする共通メソッド
         """
@@ -51,7 +54,7 @@ class DBOperator:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     conn.commit()
-                    return cursor  # 必要なら fetch は呼び出し側で
+                    return
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e):
                     if i == retries - 1:

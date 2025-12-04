@@ -189,7 +189,7 @@ class App(ctk.CTk):
         today_str = date.today().strftime('%Y-%m-%d')
         summaries_list = self.db_operator.load_summary(today_str)
         summaries_title_list = [
-            f"{created_at} | {memo or ''}"
+            f"{created_at[5:].replace('-', '/')} | {memo or ''}"
             for (_id, name, memo, _content, created_at) in summaries_list
         ]
 
@@ -219,7 +219,7 @@ class App(ctk.CTk):
         self.frame_summary.grid_rowconfigure(0, weight=1)     # summary_text_box の行
 
         self.summary_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
-        self.summary_text_box.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="nsew")
+        self.summary_text_box.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nsew")
 
         self.frame_btn_in_summary = ctk.CTkFrame(self.frame_summary,
                                                  fg_color="transparent",
@@ -480,7 +480,7 @@ class App(ctk.CTk):
 
             if result.get('status') == 'success':
                 summarized_text = result.get('summary')
-                summarized_text.replace("。", "。\n")
+                summarized_text = summarized_text.replace("。", "。\n")
                 name = str(self.name_dropdown.get())
                 memo = str(self.memo_input_box.get_text())
                 if memo in ('', '0'):

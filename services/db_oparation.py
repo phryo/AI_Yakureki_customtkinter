@@ -93,7 +93,7 @@ class DBOperator:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT name FROM names ORDER BY created_at DESC;"
+                "SELECT name FROM names ORDER BY created_at ASC;"
             )
             rows = cursor.fetchall()
         return [row[0] for row in rows]

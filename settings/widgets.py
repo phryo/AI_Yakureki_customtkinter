@@ -4,6 +4,10 @@ import tkinter as tk
 import customtkinter as ctk
 
 
+import tkinter as tk
+import customtkinter as ctk
+
+
 class NumberEntry(ctk.CTkFrame):
     def __init__(
         self,
@@ -15,23 +19,22 @@ class NumberEntry(ctk.CTkFrame):
         entry_width: int = 80,
         **kwargs,
     ):
-        # Frame 側の初期化
         super().__init__(master, **kwargs)
 
         self.min_value = min_value
         self.max_value = max_value
         self.step = step
 
-        # 最初は空にしておく（デフォルト何も入らない）
+        # 入力値（文字列として保持）
         self.var = tk.StringVar(value="")
 
-        # --------- エントリー本体 ---------
+        # エントリ本体（バリデーションは付けない → 何でも入る）
         self.entry = ctk.CTkEntry(
             self,
             textvariable=self.var,
             justify="right",
             width=entry_width,
-            placeholder_text=placeholder_text,  # ★ ここで渡す
+            placeholder_text=placeholder_text,
         )
         self.entry.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2))
 
@@ -52,41 +55,78 @@ class NumberEntry(ctk.CTkFrame):
         self.grid_rowconfigure((0, 1), weight=1)
         self.grid_columnconfigure(0, weight=1)
 
-        # 数字以外が入らないよう簡易バリデーション
-        vcmd = (self.register(self._validate), "%P")
-        self.entry.configure(validate="key", validatecommand=vcmd)
+    # ===== 公開メソッド =====
 
-    # 値を取得（空なら 0 扱いにする例）
     def get(self) -> int:
+        """
+        数値として取得。
+        - 空文字: 0 を返す
+        - 数値に変換できない文字列: 0 を返す
+        """
         text = self.var.get().strip()
         if text == "":
-            return 0  # or None にしたければここを変更
+            return 0
         try:
             return int(text)
         except ValueError:
             return 0
 
-    # 値をセット
-    def set(self, value: int):
+    def get_text(self) -> str:
+        """生の文字列をそのまま取得"""
+        return self.var.get()
+
+    def set(self, value):
+        """文字列でも数値でもセット可能"""
         self.var.set(str(value))
 
+    # ===== 内部ヘルパ =====
+
+    def _current_int_or_none(self):
+        """
+        現在の値を int に変換。
+        - 空文字: 0 を返す
+        - 変換できない: None を返す
+        """
+        text = self.var.get().strip()
+        if text == "":
+            return 0  # 空は 0 とみなす
+        try:
+            return int(text)
+        except ValueError:
+            return None
+
+    # ===== ▲▼ボタン =====
+
     def increment(self):
-        value = self.get() + self.step
+        cur = self._current_int_or_none()
+        if cur is None:
+            # 数値に変換できない場合は何もしない
+            return
+
+        value = cur + self.step
+
         if self.max_value is not None:
             value = min(value, self.max_value)
+        if self.min_value is not None:
+            value = max(value, self.min_value)
+
         self.set(value)
 
     def decrement(self):
-        value = self.get() - self.step
+        cur = self._current_int_or_none()
+        if cur is None:
+            # 数値に変換できない場合は何もしない
+            return
+
+        value = cur - self.step
+
+        if self.max_value is not None:
+            value = min(value, self.max_value)
         if self.min_value is not None:
             value = max(value, self.min_value)
+
         self.set(value)
 
-    # 入力チェック（空文字はOK、数字だけ許可）
-    def _validate(self, new_value: str):
-        if new_value == "":
-            return True
-        return new_value.isdigit()
 
 class DateSelector(ctk.CTkFrame):
     """

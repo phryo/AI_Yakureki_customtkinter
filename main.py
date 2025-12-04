@@ -59,7 +59,6 @@ class App(ctk.CTk):
 
         # 辞書、リスト
         self.names_list = self.db_operator.load_names_list()
-        self.names_list.insert(0, '')
 
         self.summaries_dict = {}
 
@@ -102,6 +101,7 @@ class App(ctk.CTk):
             fg_color="#1f6aa5",  # 通常時の色
             hover_color="#144870",
             text_color="white",
+            font=("Arial", 15, "bold"),
             command=self.start_recording,
             width=100, height=40
         )
@@ -112,17 +112,20 @@ class App(ctk.CTk):
             self.frame_btn_recorder,
             text="停止(F1)",
             state="disabled",
+            font=("Arial", 15, "bold"),
             command=self.stop_recording,
             width=100, height=40
         )
-        self.btn_record_stop.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.btn_record_stop.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
         # 録音時間表示ラベル
         self.lbl_timer = ctk.CTkLabel(
             self.frame_btn_recorder,
-            text="00:00"
+            text="00:00",
+            font=("Arial", 20, "bold"),
+            width=100, height=40
         )
-        self.lbl_timer.grid(row=0, column=2, padx=20, pady=5, sticky="w")
+        self.lbl_timer.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
         # ===== 名前一覧 =====
         self.frame_pharmacists = ctk.CTkFrame(self)
@@ -213,18 +216,15 @@ class App(ctk.CTk):
         self.frame_summary = ctk.CTkFrame(self)
         self.frame_summary.grid(row=4, column=0, padx=5, pady=5, sticky="nsew")
         self.frame_summary.grid_columnconfigure(0, weight=1)  # 横方向
-        self.frame_summary.grid_rowconfigure(1, weight=1)     # summary_text_box の行
-
-        self.summary_label = ctk.CTkLabel(self.frame_summary, text="要約：")
-        self.summary_label.grid(row=0, column=0, padx=5, pady=(5, 0), sticky="w")
+        self.frame_summary.grid_rowconfigure(0, weight=1)     # summary_text_box の行
 
         self.summary_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
-        self.summary_text_box.grid(row=1, column=0, padx=10, sticky="nsew")
+        self.summary_text_box.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="nsew")
 
         self.frame_btn_in_summary = ctk.CTkFrame(self.frame_summary,
                                                  fg_color="transparent",
                                                  border_width=0,)
-        self.frame_btn_in_summary.grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.frame_btn_in_summary.grid(row=1, column=0, padx=5, pady=5, sticky="w")
 
         # 自動ペーストボタン
         self.btn_paste = ctk.CTkButton(
@@ -252,7 +252,7 @@ class App(ctk.CTk):
         self.log_label = ctk.CTkLabel(self.frame_log, text="ログ：")
         self.log_label.grid(row=0, column=0, padx=10, pady=(5, 0), sticky="w")
 
-        self.log_box = ctk.CTkTextbox(self.frame_log, height=100)
+        self.log_box = ctk.CTkTextbox(self.frame_log, height=70)
         self.log_box.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="ew")
 
 
@@ -281,7 +281,6 @@ class App(ctk.CTk):
         self.db_operator.add_name(name)
         self.log(f'{name}を追加しました。')
         names_list = self.db_operator.load_names_list()
-        names_list.insert(0, '')
         self.name_dropdown.configure(values=names_list)
         self.name_dropdown.set(name)
 
@@ -322,7 +321,7 @@ class App(ctk.CTk):
             summaries_list = self.db_operator.load_summary(today_str, name)
 
         self.summaries_dict = {
-            f"{created_at[5:].replace('-', '/')} / {memo or ''}": {
+            f"{created_at[5:].replace('-', '/')} | {memo or ''}": {
                 "id": _id,
                 "content": content}
             for (_id, _name, memo, content, created_at) in summaries_list
@@ -331,7 +330,7 @@ class App(ctk.CTk):
         # ドロップダウン表示用に整形
         dropdown_values = list(sorted(self.summaries_dict.keys(), reverse=True))
 
-        self.log(f'{target_date} / {name}の要約を読み込みました。')
+        self.log(f'{target_date} | {name}の要約を読み込みました。')
         self.dropdown_summary.configure_values(dropdown_values)
 
     def on_selected_summary(self, selected_label: str):
@@ -379,9 +378,8 @@ class App(ctk.CTk):
 
         self.btn_record_start.configure(state='disabled',
                                         text="録音中...",
-                                        fg_color="#fff799",  # オレンジ
-                                        hover_color="#fff799",
                                         )
+        self.lbl_timer.configure(fg_color="#fff799")
         self.btn_record_stop.configure(state='normal')
 
         self.recording_thread = threading.Thread(
@@ -411,10 +409,8 @@ class App(ctk.CTk):
         self.btn_record_stop.configure(state='disabled')
         self.btn_record_start.configure(state='normal',
                                         text="録音(F1)",
-                                        fg_color="#1f6aa5",
-                                        hover_color="#144870",
                                         )
-
+        self.lbl_timer.configure(fg_color="transparent")
         recorded_file = self.recorder.recording_stop() # stop_event をここで使わないなら引数無しにしてもOK
 
         if recorded_file.get('status') == 'success':
@@ -484,8 +480,9 @@ class App(ctk.CTk):
 
             if result.get('status') == 'success':
                 summarized_text = result.get('summary')
+                summarized_text.replace("。", "。\n")
                 name = str(self.name_dropdown.get())
-                memo = str(self.memo_input_box.get())
+                memo = str(self.memo_input_box.get_text())
                 if memo in ('', '0'):
                     memo = None
                 self.after(0, self._update_summary_text, summarized_text)

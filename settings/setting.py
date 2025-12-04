@@ -7,11 +7,12 @@ if platform.system() == "Windows":
 else:
     BASE_DIR = Path(__file__).resolve().parent.parent
 
+# DB_DIR = r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter\summaries.db"
+
 # db_operation.py
 DB_PATH = BASE_DIR / 'summaries.db'
 PROMPT_PATH = BASE_DIR / 'prompt.txt'
 
-# DB_PATH = r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter\summaries.db"
 
 # recording.py
 SAMPLERATE = 44100  # サンプリングレート

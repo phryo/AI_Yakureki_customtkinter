@@ -135,9 +135,10 @@ class App(ctk.CTk):
         # ===== 名前一覧 =====
         self.frame_pharmacists = ctk.CTkFrame(self)
         self.frame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="we")
+        self.frame_pharmacists.grid_columnconfigure(0, weight=1)
 
         self.name_button_frame = ctk.CTkScrollableFrame(
-            self.frame_pharmacists, orientation="horizontal", height=80
+            self.frame_pharmacists, orientation="horizontal", height=42
         )
         self.name_button_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=(0, 5), sticky="we")
         self.frame_pharmacists.grid_columnconfigure(0, weight=1)
@@ -296,7 +297,7 @@ class App(ctk.CTk):
             btn = ctk.CTkButton(
                 self.name_button_frame,
                 text=name,
-                width=100,
+                width=60,
                 command=lambda n=name: self.select_name(n),
                 corner_radius=8,
                 height=32
@@ -517,6 +518,7 @@ class App(ctk.CTk):
     def gemini_task(self, recorded_file):
         """録音したファイルをGeminiに投げて要約する"""
         try:
+            self.summary_text_box.configure(state='disabled')
             result = self.gemini.summarize(recorded_file)
 
             if result.get('status') == 'success':
@@ -526,6 +528,7 @@ class App(ctk.CTk):
                 memo = str(self.memo_input_box.get_text())
                 if memo in ('', '0'):
                     memo = None
+                self.summary_text_box.configure(state='normal')
                 self.after(0, self._update_summary_text, summarized_text)
 
                 self.db_thread = threading.Thread(
@@ -537,6 +540,8 @@ class App(ctk.CTk):
 
         except Exception as e:
             self.after(0,self.log, f'要約エラー：{e}')
+        finally:
+            self.summary_text_box.configure(state='normal')
 
     # def gemini_task(self, recorded_file) -> bool:
     #     try:

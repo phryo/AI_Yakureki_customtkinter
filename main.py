@@ -134,7 +134,7 @@ class App(ctk.CTk):
 
         # ===== 名前一覧 =====
         self.frame_pharmacists = ctk.CTkFrame(self)
-        self.frame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.frame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="we")
 
         self.name_button_frame = ctk.CTkScrollableFrame(
             self.frame_pharmacists, orientation="horizontal", height=80

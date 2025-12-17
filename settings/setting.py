@@ -1,4 +1,5 @@
 import platform
+import sys
 from pathlib import Path
 
 
@@ -10,12 +11,18 @@ from pathlib import Path
 # # BASE_DIR = Path(r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter")
 
 # db_operation.py
-DIR_PATH = 'データ保管場所.txt'
+def app_dir() -> Path:
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+CONFIG_DIR = app_dir() / 'データ保管場所.txt'
 try:
-    with open(DIR_PATH, 'r', encoding='utf-8') as f:
-        BASE_DIR = Path(f.read())
+    raw = CONFIG_DIR.read_text(encoding='utf-8-sig').strip()
+    BASE_DIR = Path(raw)
+    if not raw:
+        raise ValueError('データ保管場所.txtが空です。')
 except FileNotFoundError:
-    BASE_DIR = Path(__file__).resolve().parent.parent
+    BASE_DIR = app_dir()
 DB_PATH = BASE_DIR / 'summaries.db'
 PROMPT_PATH = BASE_DIR / 'prompt.txt'
 

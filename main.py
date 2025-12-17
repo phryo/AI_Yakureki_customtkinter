@@ -18,6 +18,7 @@ import settings.widgets
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("blue")
 
+
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -60,6 +61,9 @@ class App(ctk.CTk):
         # 辞書、リスト
         self.names_list = self.db_operator.load_names_list()
 
+        # 選択中の投薬者
+        self.selected_name = self.names_list[0] if self.names_list else ""
+
         self.summaries_dict = {}
 
         self.current_summary_id = None
@@ -69,8 +73,9 @@ class App(ctk.CTk):
         self.btn_record_start = None
         self.btn_record_stop = None
         self.lbl_timer = None
-        self.name_dropdown_label = None
-        self.name_dropdown = None
+        self.name_button_frame = None
+        self.name_buttons: dict[str, ctk.CTkButton] = {}
+        self.name_entry = None
         self.btn_add_name = None
         self.btn_delete_name = None
         self.date_selector = None
@@ -129,28 +134,38 @@ class App(ctk.CTk):
 
         # ===== 名前一覧 =====
         self.frame_pharmacists = ctk.CTkFrame(self)
-        self.frame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.frame_pharmacists.grid(row=1, column=0, padx=5, pady=5, sticky="we")
+        self.frame_pharmacists.grid_columnconfigure(0, weight=1)
 
-        # 名前のドロップダウン
-        self.name_dropdown_label = ctk.CTkLabel(self.frame_pharmacists, text="投薬者")
-        self.name_dropdown_label.grid(row=0, column=0, padx=10, pady=(5, 0), sticky="w")
-        self.name_dropdown = ctk.CTkComboBox(self.frame_pharmacists, values=self.names_list)
-        self.name_dropdown.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="w")
+        self.name_button_frame = ctk.CTkScrollableFrame(
+            self.frame_pharmacists, orientation="horizontal", height=42
+        )
+        self.name_button_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=(0, 5), sticky="we")
+        self.frame_pharmacists.grid_columnconfigure(0, weight=1)
+
+        self.render_name_buttons()
+
+        self.name_entry = ctk.CTkEntry(
+            self.frame_pharmacists,
+            placeholder_text="投薬者名を入力",
+            width=160
+        )
+        self.name_entry.grid(row=2, column=0, padx=10, pady=(0, 5), sticky="w")
 
         # 名前新規追加
         self.btn_add_name = ctk.CTkButton(
             self.frame_pharmacists,
             text="投薬者登録",
-            command=lambda: self.add_name(self.name_dropdown.get()),
+            command=self.add_name,
             width=80, height=28,
         )
-        self.btn_add_name.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        self.btn_add_name.grid(row=2, column=1, padx=5, pady=(0, 5), sticky="w")
 
         # 名前削除
         self.btn_delete_name = ctk.CTkButton(
             self.frame_pharmacists,
             text='投薬者削除',
-            command=lambda: self.delete_name(self.name_dropdown.get()),
+            command=self.delete_name,
             width=80, height=28,
             fg_color="transparent",  # 背景なし
             border_color="#666666",
@@ -158,7 +173,7 @@ class App(ctk.CTk):
             text_color="#444444",
             hover_color="#DDDDDD",
         )
-        self.btn_delete_name.grid(row=1, column=2, padx=5, pady=5, sticky="w")
+        self.btn_delete_name.grid(row=2, column=2, padx=5, pady=(0, 5), sticky="w")
 
 
         # ===== メモ =====
@@ -273,20 +288,51 @@ class App(ctk.CTk):
         self.log_box.update()
 
     # 投薬者関連
-    def add_name(self, name: str):
-        name = name.strip()
+    def render_name_buttons(self):
+        for btn in self.name_buttons.values():
+            btn.destroy()
+        self.name_buttons.clear()
+
+        for idx, name in enumerate(self.names_list):
+            btn = ctk.CTkButton(
+                self.name_button_frame,
+                text=name,
+                width=60,
+                command=lambda n=name: self.select_name(n),
+                corner_radius=8,
+                height=32
+            )
+            btn.grid(row=0, column=idx, padx=5, pady=5, sticky="w")
+            self.name_buttons[name] = btn
+
+        self.update_name_button_styles()
+
+    def select_name(self, name: str):
+        self.selected_name = name
+        self.update_name_button_styles()
+
+    def update_name_button_styles(self):
+        for name, btn in self.name_buttons.items():
+            if name == self.selected_name:
+                btn.configure(fg_color="#1f6aa5", text_color="white", border_width=0)
+            else:
+                btn.configure(fg_color="transparent", border_color="#666666", border_width=1, text_color="#444444")
+
+    def add_name(self):
+        name = self.name_entry.get().strip()
         if not name:
-            self.log('登録する名前が選択されていません。')
+            self.log('登録する名前が入力されていません。')
             return
         self.db_operator.add_name(name)
         self.log(f'{name}を追加しました。')
-        names_list = self.db_operator.load_names_list()
-        self.name_dropdown.configure(values=names_list)
-        self.name_dropdown.set(name)
+        self.names_list = self.db_operator.load_names_list()
+        self.selected_name = name
+        self.name_entry.delete(0, "end")
+        self.render_name_buttons()
 
-    def delete_name(self, name: str):
+    def delete_name(self):
         """投薬者の削除"""
-        name = name.strip()
+        name = self.name_entry.get().strip() or self.selected_name
         if not name:
             self.log('削除する名前が選択されていません。')
             return
@@ -298,21 +344,17 @@ class App(ctk.CTk):
             return
         self.db_operator.delete_name(name)
         self.log(f'{name}を削除しました。')
-        names_list = self.db_operator.load_names_list()
-        names_list.insert(0, '')
-        self.name_dropdown.configure(values=names_list)
+        self.names_list = self.db_operator.load_names_list()
 
-        if len(names_list) > 1:
-            self.name_dropdown.set(names_list[1])
-        else:
-            self.name_dropdown.set('')
+        self.selected_name = self.names_list[0] if self.names_list else ""
+        self.render_name_buttons()
 
     # 要約関連
     def load_summaries_list(self):
         """要約のリストをDBから読み込む"""
         # 例： '2025-11-23' という文字列が入っている
         target_date = self.date_selector.get_date_str().strip()
-        name = self.name_dropdown.get()
+        name = self.selected_name
 
         if target_date:
             summaries_list = self.db_operator.load_summary(target_date, name)
@@ -476,15 +518,17 @@ class App(ctk.CTk):
     def gemini_task(self, recorded_file):
         """録音したファイルをGeminiに投げて要約する"""
         try:
+            self.summary_text_box.configure(state='disabled')
             result = self.gemini.summarize(recorded_file)
 
             if result.get('status') == 'success':
                 summarized_text = result.get('summary')
                 summarized_text = summarized_text.replace("。", "。\n")
-                name = str(self.name_dropdown.get())
+                name = str(self.selected_name)
                 memo = str(self.memo_input_box.get_text())
                 if memo in ('', '0'):
                     memo = None
+                self.summary_text_box.configure(state='normal')
                 self.after(0, self._update_summary_text, summarized_text)
 
                 self.db_thread = threading.Thread(
@@ -496,6 +540,8 @@ class App(ctk.CTk):
 
         except Exception as e:
             self.after(0,self.log, f'要約エラー：{e}')
+        finally:
+            self.summary_text_box.configure(state='normal')
 
     # def gemini_task(self, recorded_file) -> bool:
     #     try:

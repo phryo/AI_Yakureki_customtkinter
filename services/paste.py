@@ -39,53 +39,52 @@ class AutoGui:
             return {'status': 'error', 'message': 'ペーストする内容がありません。'}
         self.is_pasting = True
 
+        def _screen_target():
+            if not self.is_pasting:
+                raise PasteCancelledException
+
+            # 調剤システムを最前面にアクティブ化
+            windows = gw.getWindowsWithTitle('調剤システム')
+            if windows:
+                win = windows[0]
+                win.activate()
+            else:
+                raise Exception
+
+            # 画面サイズを取得し、ターゲット位置を計算
+            screen_width, screen_height = pyautogui.size()
+            target_x = int(screen_width / 10)
+            target_y = int(screen_height / 2 - 20)
+
+            # マウスを指定位置に移動し、クリック
+            time.sleep(0.5)
+            pyautogui.moveTo(target_x, target_y)
+            pyautogui.doubleClick(target_x, target_y)
+            time.sleep(0.5)
+
+        def _common_command(key, section_title):
+            """コマンド入力　+　内容ペースト"""
+            if not self.is_pasting:  # 実行前に必ず中断チェック
+                raise PasteCancelledException
+
+            pyautogui.hotkey('shift', ';', interval=0.1)
+            pyautogui.press(key)
+            pyautogui.press('enter')
+            time.sleep(0.2)
+
+            if section_title not in summary_dict:
+                raise ValueError(f'「{section_title}」が見つかりません。')
+            pyperclip.copy(summary_dict[section_title])
+
+            if platform.system() == 'Darwin':  # macOS
+                pyautogui.hotkey('command', 'v')
+            else:  # Windows / Linux
+                pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.2)
+            pyautogui.press('enter')
+            time.sleep(0.2)
+
         try:
-            def _common_command(key, section_title):
-                """コマンド入力　+　内容ペースト"""
-                if not self.is_pasting: # 実行前に必ず中断チェック
-                    raise PasteCancelledException
-
-                pyautogui.hotkey('shift', ';', interval=0.1)
-                pyautogui.press(key)
-                pyautogui.press('enter')
-                time.sleep(0.3)
-
-                if section_title not in summary_dict:
-                    raise ValueError(f'「{section_title}」が見つかりません。')
-                pyperclip.copy(summary_dict[section_title])
-
-                if platform.system() == 'Darwin': # macOS
-                    pyautogui.hotkey('command', 'v')
-                else: # Windows / Linux
-                    pyautogui.hotkey('ctrl', 'v')
-                time.sleep(0.3)
-                pyautogui.press('enter')
-                time.sleep(0.3)
-
-            def _screen_target():
-                if not self.is_pasting:
-                    raise PasteCancelledException
-
-                # 調剤システムを最前面にアクティブ化
-                windows = gw.getWindowsWithTitle('調剤システム')
-                if windows:
-                    win = windows[0]
-                    win.activate()
-                    time.sleep(0.5)
-                else:
-                    raise Exception
-
-                # 画面サイズを取得し、ターゲット位置を計算
-                screen_width, screen_height = pyautogui.size()
-                target_x = int(screen_width / 10)
-                target_y = int(screen_height / 2 - 20)
-
-                # マウスを指定位置に移動し、クリック
-                time.sleep(0.5)
-                pyautogui.moveTo(target_x, target_y)
-                pyautogui.doubleClick(target_x, target_y)
-                time.sleep(0.5)
-
             summary_dict = self.split_sections(text)
             _screen_target()
             for key, section_title in SECTION_MAPPING:

@@ -68,9 +68,10 @@ class AutoGui:
                 raise PasteCancelledException
 
             pyautogui.hotkey('shift', ';', interval=0.1)
+            time.sleep(0.3)
             pyautogui.press(key)
             pyautogui.press('enter')
-            time.sleep(0.2)
+            time.sleep(0.3)
 
             if section_title not in summary_dict:
                 raise ValueError(f'「{section_title}」が見つかりません。')
@@ -80,9 +81,9 @@ class AutoGui:
                 pyautogui.hotkey('command', 'v')
             else:  # Windows / Linux
                 pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.2)
+            time.sleep(0.3)
             pyautogui.press('enter')
-            time.sleep(0.2)
+            time.sleep(0.3)
 
         try:
             summary_dict = self.split_sections(text)

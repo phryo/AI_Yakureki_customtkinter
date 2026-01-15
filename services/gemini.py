@@ -1,5 +1,5 @@
-
 from google import genai
+from google.genai import types
 from google.genai.errors import APIError
 
 from settings import setting
@@ -18,11 +18,14 @@ class Gemini:
                 model='gemini-2.5-flash',
                 contents=[
                     self.prompt,
-                    uploaded_file]
+                    uploaded_file],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
             )
             summarized_text = response.text
             return {'status':'success',
-                    'summary': summarized_text}
+                    'result': summarized_text}
         except APIError as e:
             return {'status':'error',
                     'message': f'要約できませんでした。：{e}'}

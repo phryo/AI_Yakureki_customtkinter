@@ -258,6 +258,7 @@ class CenteredDropdown(ctk.CTkFrame):
         self.values = list(values) if values is not None else []
         self.command = command
         self.width = width
+        self.dynamic_resizing = False
         self.max_rows = max_rows
 
         initial = self.values[0] if self.values else ""

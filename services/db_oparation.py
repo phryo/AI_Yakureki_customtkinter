@@ -42,6 +42,16 @@ class DBOperator:
                     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
                 );
             """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS transcripts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    content TEXT
+                );
+            """)
+
             conn.commit()
 
     def _execute_with_retry(self, query: str, params: tuple = (), retries: int = 5, wait: float = 0.2) -> None:
@@ -156,4 +166,11 @@ class DBOperator:
         self._execute_with_retry(
             "UPDATE summaries SET content = ? where id = ?;",
             (content, summary_id)
+        )
+
+    def save_transcript(self, content: str, name: Optional[str] = None) -> None:
+        """文字起こしを保存"""
+        self._execute_with_retry(
+            "INSERT INTO summaries (name, content) VALUES (?, ?);",
+            (name, content)
         )

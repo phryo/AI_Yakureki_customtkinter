@@ -1,3 +1,4 @@
+import json
 import os
 import time
 from datetime import date
@@ -518,17 +519,20 @@ class App(ctk.CTk):
     def gemini_task(self, recorded_file):
         """録音したファイルをGeminiに投げて要約する"""
         try:
-            self.summary_text_box.configure(state='disabled')
             result = self.gemini.summarize(recorded_file)
 
             if result.get('status') == 'success':
-                summarized_text = result.get('summary')
+                summarized_json = result.get('result')
+                data = json.loads(summarized_json)
+                summarized_text = data.get('summary')
                 summarized_text = summarized_text.replace("。", "。\n")
+
+                summarized_transcript = data.get('transcript')
+
                 name = str(self.selected_name)
                 memo = str(self.memo_input_box.get_text())
                 if memo in ('', '0'):
                     memo = None
-                self.summary_text_box.configure(state='normal')
                 self.after(0, self._update_summary_text, summarized_text)
 
                 self.db_thread = threading.Thread(
@@ -538,10 +542,15 @@ class App(ctk.CTk):
                 )
                 self.db_thread.start()
 
+                self.db_thread = threading.Thread(
+                    target=self.db_operator.save_transcript,
+                    args=(summarized_transcript, name),
+                    daemon=True
+                )
+                self.db_thread.start()
+
         except Exception as e:
             self.after(0,self.log, f'要約エラー：{e}')
-        finally:
-            self.summary_text_box.configure(state='normal')
 
     # def gemini_task(self, recorded_file) -> bool:
     #     try:

@@ -17,7 +17,7 @@ import settings.widgets
 
 
 ctk.set_appearance_mode("system")
-ctk.set_default_color_theme("blue")
+ctk.set_default_color_theme("green")
 
 
 class App(ctk.CTk):
@@ -50,7 +50,7 @@ class App(ctk.CTk):
         self.autogui = AutoGui()
 
         self.title("Gemini　AI薬歴")
-        self.geometry("500x900")
+        self.geometry("700x1000")
         # self.attributes('-topmost', True)
 
         # ★ ウィンドウ全体の grid 設定
@@ -255,7 +255,7 @@ class App(ctk.CTk):
             self.frame_btn_in_summary,
             text="保存",
             width=50,
-            command=self.update_summary
+            command=self.overwrite_save_summary
         )
         self.btn_update_summary.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
@@ -403,14 +403,14 @@ class App(ctk.CTk):
         summary_id = self.db_operator.save_summary(content, name, memo)
         self.after(0, self._set_current_summary_id, summary_id)
 
-    def update_summary(self):
+    def overwrite_save_summary(self):
         summary_id = self.current_summary_id
         if not summary_id:
             self.log('更新対象の要約が選択されていません。')
             return
         current_content = self.summary_text_box.get("1.0", "end-1c")
         self.db_thread = threading.Thread(
-            target=self.db_operator.update_summary,
+            target=self.db_operator.overwrite_save_summary,
             args=(summary_id, current_content,),
             daemon=True
         )
@@ -585,7 +585,7 @@ class App(ctk.CTk):
     # 自動ペースト
     def auto_paste(self):
         text = self.summary_text_box.get('1.0', 'end-1c')
-        self.update_summary()
+        self.overwrite_save_summary()
         self.log('自動ペーストしています。')
         result = self.autogui.paste(text)
         if result.get('status') == 'success':

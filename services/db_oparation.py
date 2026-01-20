@@ -63,25 +63,6 @@ class DBOperator:
                 else:
                     raise
 
-    def _execute_insert_with_retry(self, query: str, params: tuple = (), retries: int = 5, wait: float = 0.2) -> int:
-        """
-        INSERT を実行し、database is locked が出たら少し待ってリトライする共通メソッド
-        """
-        for i in range(retries):
-            try:
-                with self._get_connection() as conn:
-                    cursor = conn.cursor()
-                    cursor.execute(query, params)
-                    conn.commit()
-                    return int(cursor.lastrowid)
-            except sqlite3.OperationalError as e:
-                if "database is locked" in str(e):
-                    if i == retries - 1:
-                        raise
-                    time.sleep(wait)
-                else:
-                    raise
-
     def cleanup_old_summaries(self, days: int = 7) -> None:
         """
         古い要約を削除する。
@@ -128,10 +109,25 @@ class DBOperator:
     # === 要約の操作 ===
     def save_summary(self, content: str, name: Optional[str], memo: Optional[str]) -> int:
         """要約を保存し、作成されたIDを返す"""
-        return self._execute_insert_with_retry(
-            "INSERT INTO summaries (name, memo, content) VALUES (?, ?, ?);",
-            (name, memo, content)
-        )
+        retries: int = 5
+        wait: float = 0.2
+        for i in range(retries):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO summaries (name, memo, content) VALUES (?, ?, ?);",
+                        (name, memo, content)
+                    )
+                    conn.commit()
+                    return int(cursor.lastrowid)
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    if i == retries - 1:
+                        raise
+                    time.sleep(wait)
+                else:
+                    raise
 
     def load_summary(self, target_date: Optional[str] = None, name: Optional[str] = None) -> List[Tuple]:
         """

@@ -3,13 +3,6 @@ import sys
 from pathlib import Path
 
 
-# if platform.system() == "Windows":
-#     BASE_DIR = Path(r"\\Toridesvr01\取手\06_マニュアル・ 書類フォーマット\AI-薬歴")
-# else:
-#     BASE_DIR = Path(__file__).resolve().parent.parent
-#
-# # BASE_DIR = Path(r"C:\Users\sakur\PycharmProjects\AI_Yakureki_customtkinter")
-
 # db_operation.py
 def app_dir() -> Path:
     if getattr(sys, 'frozen', False):

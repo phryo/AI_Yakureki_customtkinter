@@ -278,6 +278,7 @@ class CenteredDropdown(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         self._popup = None
+        self._outside_click_bind_id = None
 
     # ========= 公開 API =========
 
@@ -319,6 +320,7 @@ class CenteredDropdown(ctk.CTkFrame):
         # 既に開いていたら閉じる
         if self._popup is not None and self._popup.winfo_exists():
             self._popup.destroy()
+            self._unbind_outside_click()
 
         top = ctk.CTkToplevel(self)
         self._popup = top
@@ -402,6 +404,7 @@ class CenteredDropdown(ctk.CTkFrame):
         top.focus_force()
         top.bind("<FocusOut>", lambda e: self._safe_destroy())
         top.bind("<Escape>", lambda e: self._safe_destroy())
+        self._bind_outside_click(top)
 
     def _on_select(self, value: str):
         self.var.set(value)
@@ -413,3 +416,25 @@ class CenteredDropdown(ctk.CTkFrame):
         if self._popup is not None and self._popup.winfo_exists():
             self._popup.destroy()
         self._popup = None
+        self._unbind_outside_click()
+
+    def _bind_outside_click(self, popup):
+        root = self.winfo_toplevel()
+
+        def _handle_click(event):
+            widget = event.widget
+            if widget is None:
+                return
+            widget_top = widget.winfo_toplevel()
+            if widget_top is popup:
+                return
+            self._safe_destroy()
+
+        self._outside_click_bind_id = root.bind("<Button-1>", _handle_click, add="+")
+
+    def _unbind_outside_click(self):
+        if self._outside_click_bind_id is None:
+            return
+        root = self.winfo_toplevel()
+        root.unbind("<Button-1>", self._outside_click_bind_id)
+        self._outside_click_bind_id = None

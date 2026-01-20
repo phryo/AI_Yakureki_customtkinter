@@ -4,6 +4,7 @@ from datetime import date
 import threading
 import tkinter
 import queue
+from typing import Optional
 
 import customtkinter as ctk
 
@@ -393,8 +394,20 @@ class App(ctk.CTk):
         self.summary_text_box.delete('1.0', 'end')
         self.summary_text_box.insert('1.0', text)
 
+    def _set_current_summary_id(self, summary_id: int):
+        """最新の要約IDを保持する"""
+        self.current_summary_id = summary_id
+
+    def _save_summary_and_set_id(self, content: str, name: str, memo: Optional[str]):
+        """新規要約を保存し、IDを更新"""
+        summary_id = self.db_operator.save_summary(content, name, memo)
+        self.after(0, self._set_current_summary_id, summary_id)
+
     def update_summary(self):
         summary_id = self.current_summary_id
+        if not summary_id:
+            self.log('更新対象の要約が選択されていません。')
+            return
         current_content = self.summary_text_box.get("1.0", "end-1c")
         self.db_thread = threading.Thread(
             target=self.db_operator.update_summary,
@@ -532,7 +545,7 @@ class App(ctk.CTk):
                 self.after(0, self._update_summary_text, summarized_text)
 
                 self.db_thread = threading.Thread(
-                    target=self.db_operator.save_summary,
+                    target=self._save_summary_and_set_id,
                     args=(summarized_text, name, memo,),
                     daemon=True
                 )

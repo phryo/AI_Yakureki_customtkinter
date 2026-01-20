@@ -400,8 +400,11 @@ class App(ctk.CTk):
 
     def _save_summary_and_set_id(self, content: str, name: str, memo: Optional[str]):
         """新規要約を保存し、IDを更新"""
-        summary_id = self.db_operator.save_summary(content, name, memo)
-        self.after(0, self._set_current_summary_id, summary_id)
+        try:
+            summary_id = self.db_operator.save_summary(content, name, memo)
+            self.after(0, self._set_current_summary_id, summary_id)
+        except Exception as e:
+            self.after(0, self.log, f'要約の保存に失敗しました。： {e}')
 
     def overwrite_save_summary(self):
         summary_id = self.current_summary_id
@@ -556,31 +559,6 @@ class App(ctk.CTk):
         finally:
             self.summary_text_box.configure(state='normal')
 
-    # def gemini_task(self, recorded_file) -> bool:
-    #     try:
-    #         # もし self.gemini.client.host みたいな形でエンドポイントが取れるなら print
-    #         try:
-    #             host = getattr(self.gemini, "host", None)
-    #             if host:
-    #                 self.log(f"Gemini host = {repr(host)}")
-    #         except Exception:
-    #             pass
-    #
-    #         result = self.gemini.summarize(recorded_file)
-    #
-    #     except Exception as e:
-    #         # ここで会社PC特有のエラー内容をログに出す
-    #         self.log(f"Gemini への接続に失敗しました: {repr(e)}")
-    #         return False
-    #
-    #     if not result or result.get('status') != 'success':
-    #         self.log(f"Gemini 要約失敗: {result}")
-    #         return False
-    #
-    #     summarized_text = result.get('summary', '')
-    #     # 要約結果をUIに反映
-    #     self.after(0, self._update_summary_text, summarized_text)
-    #     return True
 
     # 自動ペースト
     def auto_paste(self):

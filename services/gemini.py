@@ -77,6 +77,9 @@ class Gemini:
 
     @staticmethod
     def split_summarized_text(text: str) ->str:
+        """
+        Geminiが最初に吐き出す「以下の通り出力します」等の削除する
+        """
         if not text:
             return text
 

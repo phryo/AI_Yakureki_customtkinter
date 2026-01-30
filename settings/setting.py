@@ -35,7 +35,7 @@ with PROMPT_PATH.open('r', encoding='utf-8') as f:
 # paste.py
 SECTION_MAPPING = [
     ('/', '服薬状況'),
-    ('*', '体調変化'),
+    ('*', '副作用'),
     ('7', 'S/O（患者）'),
     ('4', 'A/P（指導）'),
     ('k', '計画'),

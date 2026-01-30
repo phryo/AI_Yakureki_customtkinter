@@ -68,7 +68,6 @@ class AutoGui:
                 raise PasteCancelledException
 
             pyautogui.hotkey('shift', ';', interval=0.1)
-            time.sleep(0.3)
             pyautogui.press(key)
             pyautogui.press('enter')
             time.sleep(0.3)
@@ -81,7 +80,7 @@ class AutoGui:
                 pyautogui.hotkey('command', 'v')
             else:  # Windows / Linux
                 pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.3)
+            time.sleep(0.2)
             pyautogui.press('enter')
             time.sleep(0.3)
 

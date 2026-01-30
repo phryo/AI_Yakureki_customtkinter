@@ -50,7 +50,7 @@ class App(ctk.CTk):
         self.autogui = AutoGui()
 
         self.title("Gemini　AI薬歴")
-        self.geometry("700x1000")
+        self.geometry("600x1000")
         # self.attributes('-topmost', True)
 
         # ★ ウィンドウ全体の grid 設定

@@ -13,7 +13,7 @@ class PasteCancelledException(Exception):
     """ペーストがキャンセルされたことを示すためのカスタム例外"""
     pass
 
-class AutoGui:
+class AutoPaste:
     def __init__(self):
         self.is_pasting = False
 
@@ -70,7 +70,7 @@ class AutoGui:
             pyautogui.hotkey('shift', ';', interval=0.1)
             pyautogui.press(key)
             pyautogui.press('enter')
-            time.sleep(0.3)
+            time.sleep(0.5)
 
             if section_title not in summary_dict:
                 raise ValueError(f'「{section_title}」が見つかりません。')
@@ -80,7 +80,7 @@ class AutoGui:
                 pyautogui.hotkey('command', 'v')
             else:  # Windows / Linux
                 pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.2)
+            time.sleep(0.3)
             pyautogui.press('enter')
             time.sleep(0.3)
 

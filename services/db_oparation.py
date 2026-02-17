@@ -105,6 +105,31 @@ class DBOperator:
                 (name,)
         )
 
+    def rename_name(self, old_name: str, new_name: str) -> None:
+        """名前を変更し、過去要約の name も同時に更新する"""
+        retries: int = 5
+        wait: float = 0.2
+        for i in range(retries):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE names SET name = ? WHERE name = ?;",
+                        (new_name, old_name)
+                    )
+                    cursor.execute(
+                        "UPDATE summaries SET name = ? WHERE name = ?;",
+                        (new_name, old_name)
+                    )
+                    conn.commit()
+                    return
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    if i == retries - 1:
+                        raise
+                    time.sleep(wait)
+                else:
+                    raise
 
     # === 要約の操作 ===
     def save_summary(self, content: str, name: Optional[str], memo: Optional[str]) -> int:

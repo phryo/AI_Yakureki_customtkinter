@@ -1,17 +1,13 @@
-from datetime import date
 import os
 import queue
 import threading
 import time
 import tkinter
-from typing import Optional
 
 import customtkinter as ctk
 
-from services.gemini import Gemini
+from controller.main_controller import MainController
 from services.recording import Recorder
-from services.paste import AutoPaste
-from services.db_oparation import DBOperator
 import settings.setting
 import ui.widgets
 
@@ -23,7 +19,7 @@ class App(ctk.CTk):
         ctk.set_appearance_mode("system")
         ctk.set_default_color_theme("blue")
 
-        self.db_operator = DBOperator()
+        self.controller = MainController()
         self.db_thread = None
 
         self.bind("<F1>", self.on_f1)
@@ -38,7 +34,6 @@ class App(ctk.CTk):
         self.record_timer_id = None
         self.max_record_seconds = settings.setting.MAX_RECORDING_SECONDS
 
-        self.gemini = Gemini()
         # ★ Gemini 用キュー & ワーカースレッド
         self.gemini_queue = queue.Queue()
         self.gemini_worker_thread = threading.Thread(
@@ -46,8 +41,6 @@ class App(ctk.CTk):
             daemon=True
         )
         self.gemini_worker_thread.start()
-
-        self.autogui = AutoPaste()
 
         self.title("Gemini　AI薬歴")
         self.geometry("600x1000")
@@ -60,7 +53,7 @@ class App(ctk.CTk):
         self.grid_rowconfigure(4, weight=1)
 
         # 辞書、リスト
-        self.names_list = self.db_operator.load_names_list()
+        self.names_list = self.controller.load_names_list()
 
         # 選択中の投薬者
         self.selected_name = self.names_list[0] if self.names_list else ""
@@ -78,6 +71,7 @@ class App(ctk.CTk):
         self.name_buttons: dict[str, ctk.CTkButton] = {}
         self.name_entry = None
         self.btn_add_name = None
+        self.btn_rename_name = None
         self.btn_delete_name = None
         self.date_selector = None
         self.memo_label = None
@@ -141,7 +135,7 @@ class App(ctk.CTk):
         self.name_button_frame = ctk.CTkScrollableFrame(
             self.frame_pharmacists, orientation="horizontal", height=42
         )
-        self.name_button_frame.grid(row=1, column=0, columnspan=3, padx=10, pady=(0, 5), sticky="we")
+        self.name_button_frame.grid(row=1, column=0, columnspan=4, padx=10, pady=(0, 5), sticky="we")
         self.frame_pharmacists.grid_columnconfigure(0, weight=1)
 
         self.render_name_buttons()
@@ -162,6 +156,15 @@ class App(ctk.CTk):
         )
         self.btn_add_name.grid(row=2, column=1, padx=5, pady=(0, 5), sticky="w")
 
+        # 名前変更
+        self.btn_rename_name = ctk.CTkButton(
+            self.frame_pharmacists,
+            text="投薬者名変更",
+            command=self.rename_selected_name,
+            width=100, height=28,
+        )
+        self.btn_rename_name.grid(row=2, column=2, padx=5, pady=(0, 5), sticky="w")
+
         # 名前削除
         self.btn_delete_name = ctk.CTkButton(
             self.frame_pharmacists,
@@ -174,7 +177,7 @@ class App(ctk.CTk):
             text_color="#444444",
             hover_color="#DDDDDD",
         )
-        self.btn_delete_name.grid(row=2, column=2, padx=5, pady=(0, 5), sticky="w")
+        self.btn_delete_name.grid(row=2, column=3, padx=5, pady=(0, 5), sticky="w")
 
 
         # ===== メモ =====
@@ -202,12 +205,7 @@ class App(ctk.CTk):
 
 
         # ===要約再読み込み===
-        today_str = date.today().strftime('%Y-%m-%d')
-        summaries_list = self.db_operator.load_summary(today_str)
-        summaries_title_list = [
-            f"{created_at[5:].replace('-', '/')} | {memo or ''}"
-            for (_id, name, memo, _content, created_at) in summaries_list
-        ]
+        summaries_title_list = self.controller.load_today_summary_titles()
 
         self.frame_load_summaries = ctk.CTkFrame(self)
         self.frame_load_summaries.grid(row=3, column=0, padx=5, pady=5, sticky="w")
@@ -320,14 +318,14 @@ class App(ctk.CTk):
                 btn.configure(fg_color="transparent", border_color="#666666", border_width=1, text_color="#444444")
 
     def add_name(self):
-        name = self.name_entry.get().strip()
-        if not name:
-            self.log('登録する名前が入力されていません。')
+        result = self.controller.add_name(self.name_entry.get())
+        if result.get("status") != "success":
+            self.log(result.get("message"))
             return
-        self.db_operator.add_name(name)
-        self.log(f'{name}を追加しました。')
-        self.names_list = self.db_operator.load_names_list()
-        self.selected_name = name
+
+        self.log(result.get("message"))
+        self.names_list = result.get("names_list", [])
+        self.selected_name = result.get("selected_name", "")
         self.name_entry.delete(0, "end")
         self.render_name_buttons()
 
@@ -335,7 +333,7 @@ class App(ctk.CTk):
         """投薬者の削除"""
         name = self.name_entry.get().strip() or self.selected_name
         if not name:
-            self.log('削除する名前が選択されていません。')
+            self.log("削除する名前が選択されていません。")
             return
         possible_delete = tkinter.messagebox.askokcancel(
             '確認',
@@ -343,11 +341,45 @@ class App(ctk.CTk):
         )
         if not possible_delete:
             return
-        self.db_operator.delete_name(name)
-        self.log(f'{name}を削除しました。')
-        self.names_list = self.db_operator.load_names_list()
+        result = self.controller.delete_name(name)
+        if result.get("status") != "success":
+            self.log(result.get("message"))
+            return
+        self.log(result.get("message"))
+        self.names_list = result.get("names_list", [])
+        self.selected_name = result.get("selected_name", "")
+        self.render_name_buttons()
 
-        self.selected_name = self.names_list[0] if self.names_list else ""
+    def rename_selected_name(self):
+        current_name = (self.selected_name or "").strip()
+        new_name = self.name_entry.get().strip()
+
+        if not current_name:
+            self.log("変更する名前が選択されていません。")
+            return
+        if not new_name:
+            self.log("変更後の名前が入力されていません。")
+            return
+        if current_name == new_name:
+            self.log("変更後の名前が現在の名前と同じです。")
+            return
+
+        possible_rename = tkinter.messagebox.askokcancel(
+            "確認",
+            f"「{current_name}」を「{new_name}」に変更しますか？"
+        )
+        if not possible_rename:
+            return
+
+        result = self.controller.rename_name(current_name, new_name)
+        if result.get("status") != "success":
+            self.log(result.get("message"))
+            return
+
+        self.log(result.get("message"))
+        self.names_list = result.get("names_list", [])
+        self.selected_name = result.get("selected_name", "")
+        self.name_entry.delete(0, "end")
         self.render_name_buttons()
 
     # 要約関連
@@ -357,34 +389,20 @@ class App(ctk.CTk):
         target_date = self.date_selector.get_date_str().strip()
         name = self.selected_name
 
-        if target_date:
-            summaries_list = self.db_operator.load_summary(target_date, name)
-        else:
-            today_str = date.today().strftime('%Y-%m-%d')
-            summaries_list = self.db_operator.load_summary(today_str, name)
-
-        self.summaries_dict = {
-            f"{created_at[5:].replace('-', '/')} | {memo or ''}": {
-                "id": _id,
-                "content": content}
-            for (_id, _name, memo, content, created_at) in summaries_list
-        }
-
-        # ドロップダウン表示用に整形
-        dropdown_values = list(sorted(self.summaries_dict.keys(), reverse=True))
-
-        self.log(f'{target_date} | {name}の要約を読み込みました。')
-        self.dropdown_summary.configure_values(dropdown_values)
+        result = self.controller.load_summaries(target_date, name)
+        self.summaries_dict = result.get("summaries_dict", {})
+        self.dropdown_summary.configure_values(result.get("dropdown_values", []))
+        self.log(f"{result.get('target_date')} | {name}の要約を読み込みました。")
 
     def on_selected_summary(self, selected_label: str):
         """ドロップダウンで要約を選択したときに呼ばれる"""
-        data = self.summaries_dict.get(selected_label)
-        if not data:
-            self.log('要約データが取得できませんでした。')
+        result = self.controller.get_summary_data(self.summaries_dict, selected_label)
+        if result.get("status") != "success":
+            self.log(result.get("message"))
             return
 
-        self.current_summary_id = data.get("id")
-        selected_current_content = data.get("content")
+        self.current_summary_id = result.get("id")
+        selected_current_content = result.get("content")
 
         self.summary_text_box.delete("1.0", "end")
         self.summary_text_box.insert("end", selected_current_content)
@@ -394,17 +412,13 @@ class App(ctk.CTk):
         self.summary_text_box.delete('1.0', 'end')
         self.summary_text_box.insert('1.0', text)
 
-    def _set_current_summary_id(self, summary_id: int):
-        """最新の要約IDを保持する"""
+    def _apply_summary_result(self, text: str, summary_id: int):
+        """要約内容と最新IDをメインスレッドで反映する"""
+        self._update_summary_text(text)
         self.current_summary_id = summary_id
 
-    def _save_summary_and_set_id(self, content: str, name: str, memo: Optional[str]):
-        """新規要約を保存し、IDを更新"""
-        try:
-            summary_id = self.db_operator.save_summary(content, name, memo)
-            self.after(0, self._set_current_summary_id, summary_id)
-        except Exception as e:
-            self.after(0, self.log, f'要約の保存に失敗しました。： {e}')
+    def _set_summary_text_box_state(self, state: str):
+        self.summary_text_box.configure(state=state)
 
     def overwrite_save_summary(self):
         summary_id = self.current_summary_id
@@ -413,7 +427,7 @@ class App(ctk.CTk):
             return
         current_content = self.summary_text_box.get("1.0", "end-1c")
         self.db_thread = threading.Thread(
-            target=self.db_operator.overwrite_save_summary,
+            target=self.controller.overwrite_summary,
             args=(summary_id, current_content,),
             daemon=True
         )
@@ -520,13 +534,13 @@ class App(ctk.CTk):
 
             try:
                 # 実際の Gemini 呼び出し
-                self.log(f'Gemini 要約を開始します。')
+                self.after(0, self.log, "Gemini 要約を開始します。")
                 self.gemini_task(file_path)
-                self.log(f'Gemini 要約が完了しました。')
+                self.after(0, self.log, "Gemini 要約が完了しました。")
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except Exception as e:
-                self.log(f'Gemini 要約中にエラー: {e}')
+                self.after(0, self.log, f"Gemini 要約中にエラー: {e}")
             finally:
                 # キューに対して「1 個処理完了」と通知
                 self.gemini_queue.task_done()
@@ -534,30 +548,26 @@ class App(ctk.CTk):
     def gemini_task(self, recorded_file):
         """録音したファイルをGeminiに投げて要約する"""
         try:
-            self.summary_text_box.configure(state='disabled')
-            result = self.gemini.summarize(recorded_file)
-
-            if result.get('status') == 'success':
-                summarized_text = result.get('summary')
-                summarized_text = summarized_text.replace("。", "。\n")
-                name = str(self.selected_name)
-                memo = str(self.memo_input_box.get_text())
-                if memo in ('', '0'):
-                    memo = None
-                self.summary_text_box.configure(state='normal')
-                self.after(0, self._update_summary_text, summarized_text)
-
-                self.db_thread = threading.Thread(
-                    target=self._save_summary_and_set_id,
-                    args=(summarized_text, name, memo,),
-                    daemon=True
+            self.after(0, self._set_summary_text_box_state, "disabled")
+            result = self.controller.summarize_and_save(
+                recorded_file,
+                self.selected_name,
+                self.memo_input_box.get_text(),
+            )
+            if result.get("status") == "success":
+                self.after(
+                    0,
+                    self._apply_summary_result,
+                    result.get("summary", ""),
+                    result.get("summary_id"),
                 )
-                self.db_thread.start()
+            else:
+                self.after(0, self.log, result.get("message", "要約に失敗しました。"))
 
         except Exception as e:
-            self.after(0,self.log, f'要約エラー：{e}')
+            self.after(0, self.log, f"要約エラー：{e}")
         finally:
-            self.summary_text_box.configure(state='normal')
+            self.after(0, self._set_summary_text_box_state, "normal")
 
 
     # 自動ペースト
@@ -565,7 +575,7 @@ class App(ctk.CTk):
         text = self.summary_text_box.get('1.0', 'end-1c')
         self.overwrite_save_summary()
         self.log('自動ペーストしています。')
-        result = self.autogui.paste(text)
+        result = self.controller.auto_paste(text)
         if result.get('status') == 'success':
             self.log(result.get('message'))
         else:

@@ -39,10 +39,20 @@ class DBOperator:
                     name TEXT,
                     memo TEXT,
                     content TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    transcription TEXT
                 );
             """)
+            self._ensure_summaries_transcription_column(cursor)
             conn.commit()
+
+    @staticmethod
+    def _ensure_summaries_transcription_column(cursor: sqlite3.Cursor) -> None:
+        """既存DBに transcription 列が無い場合のみ追加する。"""
+        cursor.execute("PRAGMA table_info(summaries);")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "transcription" not in columns:
+            cursor.execute("ALTER TABLE summaries ADD COLUMN transcription TEXT;")
 
     def _execute_with_retry(self, query: str, params: tuple = (), retries: int = 5, wait: float = 0.2) -> None:
         """
@@ -132,7 +142,13 @@ class DBOperator:
                     raise
 
     # === 要約の操作 ===
-    def save_summary(self, content: str, name: Optional[str], memo: Optional[str]) -> int:
+    def save_summary(
+        self,
+        content: str,
+        name: Optional[str],
+        memo: Optional[str],
+        transcription: Optional[str] = None,
+    ) -> int:
         """要約を保存し、作成されたIDを返す"""
         retries: int = 5
         wait: float = 0.2
@@ -141,8 +157,8 @@ class DBOperator:
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute(
-                        "INSERT INTO summaries (name, memo, content) VALUES (?, ?, ?);",
-                        (name, memo, content)
+                        "INSERT INTO summaries (name, memo, content, transcription) VALUES (?, ?, ?, ?);",
+                        (name, memo, content, transcription)
                     )
                     conn.commit()
                     return int(cursor.lastrowid)
@@ -164,7 +180,7 @@ class DBOperator:
             cursor = conn.cursor()
 
             base_query = """
-                SELECT id, name, memo, content, created_at
+                SELECT id, name, memo, content, created_at, transcription
                 FROM summaries
             """
 

@@ -159,6 +159,7 @@ class MainController:
         return {
             "status": "success",
             "summary": summarized_text,
+            "transcription": transcription,
             "summary_id": summary_id,
         }
 

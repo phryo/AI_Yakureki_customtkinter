@@ -61,7 +61,9 @@ class App(ctk.CTk):
         self.summaries_dict = {}
 
         self.current_summary_id = None
-        self.selected_current_content = None
+        self.current_summary_content = ""
+        self.current_summary_transcription = ""
+        self.current_summary_display_mode = "要約"
 
         # ウィジェット（上から順番）
         self.btn_record_start = None
@@ -77,6 +79,7 @@ class App(ctk.CTk):
         self.memo_label = None
         self.memo_input_box = None
         self.dropdown_summary = None
+        self.dropdown_summary_display_mode = None
         self.btn_load_summaries = None
         self.summary_label = None
         self.summary_text_box = None
@@ -224,6 +227,14 @@ class App(ctk.CTk):
             command=self.load_summaries_list
         )
         self.btn_load_summaries.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        self.dropdown_summary_display_mode = ui.widgets.CenteredDropdown(
+            self.frame_load_summaries,
+            values=["要約", "文字起こし"],
+            command=self.on_summary_display_mode_changed,
+            width=100,
+        )
+        self.dropdown_summary_display_mode.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
 
         # ===== 要約（ここだけリサイズ対象） =====
@@ -402,20 +413,46 @@ class App(ctk.CTk):
             return
 
         self.current_summary_id = result.get("id")
-        selected_current_content = result.get("content")
+        self.current_summary_content = result.get("content", "")
+        self.current_summary_transcription = result.get("transcription", "")
+        self._show_current_summary_by_mode()
 
-        self.summary_text_box.delete("1.0", "end")
-        self.summary_text_box.insert("end", selected_current_content)
+    def _cache_current_text_for_active_mode(self):
+        if not self.current_summary_id:
+            return
+        current_text = self.summary_text_box.get("1.0", "end-1c")
+        if self.current_summary_display_mode == "文字起こし":
+            self.current_summary_transcription = current_text
+        else:
+            self.current_summary_content = current_text
+
+    def _show_current_summary_by_mode(self):
+        text = (
+            self.current_summary_transcription
+            if self.current_summary_display_mode == "文字起こし"
+            else self.current_summary_content
+        )
+        self._update_summary_text(text)
+
+    def on_summary_display_mode_changed(self, selected_mode: str):
+        self._cache_current_text_for_active_mode()
+        self.current_summary_display_mode = selected_mode
+        self._show_current_summary_by_mode()
 
     def _update_summary_text(self, text: str):
         """要約結果をテキストボックスに反映（メインスレッドで実行）"""
         self.summary_text_box.delete('1.0', 'end')
         self.summary_text_box.insert('1.0', text)
 
-    def _apply_summary_result(self, text: str, summary_id: int):
+    def _apply_summary_result(self, text: str, summary_id: int, transcription: str):
         """要約内容と最新IDをメインスレッドで反映する"""
-        self._update_summary_text(text)
         self.current_summary_id = summary_id
+        self.current_summary_content = text
+        self.current_summary_transcription = transcription
+        self.current_summary_display_mode = "要約"
+        if self.dropdown_summary_display_mode is not None:
+            self.dropdown_summary_display_mode.var.set("要約")
+        self._update_summary_text(self.current_summary_content)
 
     def _set_summary_text_box_state(self, state: str):
         self.summary_text_box.configure(state=state)
@@ -425,7 +462,11 @@ class App(ctk.CTk):
         if not summary_id:
             self.log('更新対象の要約が選択されていません。')
             return
+        if self.current_summary_display_mode == "文字起こし":
+            self.log("文字起こしは保存対象外です。表示を要約に切り替えて保存してください。")
+            return
         current_content = self.summary_text_box.get("1.0", "end-1c")
+        self.current_summary_content = current_content
         self.db_thread = threading.Thread(
             target=self.controller.overwrite_summary,
             args=(summary_id, current_content,),
@@ -560,6 +601,7 @@ class App(ctk.CTk):
                     self._apply_summary_result,
                     result.get("summary", ""),
                     result.get("summary_id"),
+                    result.get("transcription", ""),
                 )
             else:
                 self.after(0, self.log, result.get("message", "要約に失敗しました。"))
@@ -572,6 +614,9 @@ class App(ctk.CTk):
 
     # 自動ペースト
     def auto_paste(self):
+        if self.current_summary_display_mode == "文字起こし":
+            self.log("文字起こし表示中は自動ペーストできません。要約に切り替えてください。")
+            return
         text = self.summary_text_box.get('1.0', 'end-1c')
         self.overwrite_save_summary()
         self.log('自動ペーストしています。')

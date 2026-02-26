@@ -8,7 +8,10 @@ from settings import setting
 
 class Gemini:
     def __init__(self):
-        self.client = genai.Client()
+        self.client = genai.Client(
+            # vertexai=True,
+            # location='asia-northeast1'
+        )
         self.prompt = setting.PROMPT
 
     def summarize(self, recorded_file):
@@ -31,8 +34,10 @@ class Gemini:
                 summarized_text = self._extract_text_from_candidates(response)
 
             if not isinstance(summarized_text, str) or not summarized_text.strip():
-                return {'status':'error',
-                    'summary': f"Geminiの応答が空でした。response={response!r}"}
+                return {
+                    'status': 'error',
+                    'message': f"Geminiの応答が空でした。response={response!r}",
+                }
 
             summarized_text = self.split_summarized_text(summarized_text)
 

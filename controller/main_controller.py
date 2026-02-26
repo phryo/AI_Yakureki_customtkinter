@@ -91,8 +91,8 @@ class MainController:
         summaries_dict = {
             f"{created_at[5:].replace('-', '/')} | {memo or ''}": {
                 "id": _id,
-                "content": content,
-                "transcription": transcription,
+                "content": self._normalize_text(content),
+                "transcription": self._normalize_text(transcription),
             }
             for (_id, _name, memo, content, created_at, transcription) in summaries_list
         }
@@ -111,8 +111,8 @@ class MainController:
         return {
             "status": "success",
             "id": data.get("id"),
-            "content": data.get("content", ""),
-            "transcription": data.get("transcription", ""),
+            "content": data.get("content") or "",
+            "transcription": data.get("transcription") or "",
         }
 
     @staticmethod
@@ -121,6 +121,21 @@ class MainController:
         if text in ("", "0"):
             return None
         return text
+
+    @staticmethod
+    def _normalize_text(value: Any) -> str:
+        return str(value).strip() if value is not None else ""
+
+    @staticmethod
+    def _missing_summary_headers(summary_text: str) -> list[str]:
+        required_headers = [
+            "【服薬状況】",
+            "【副作用】",
+            "【S/O（患者）】",
+            "【A/P（指導）】",
+            "【計画】",
+        ]
+        return [header for header in required_headers if header not in summary_text]
 
     @staticmethod
     def _separate_summary_and_transcription(text: str) -> tuple[str, str]:
@@ -147,19 +162,29 @@ class MainController:
                 "message": result.get("message", "要約に失敗しました。"),
             }
 
-        result_text = result.get("summary", "")
+        result_text = self._normalize_text(result.get("summary", ""))
         transcription, summary = self._separate_summary_and_transcription(result_text)
-        summarized_text = summary.replace("。", "。\n")
+        summarized_text = self._normalize_text(summary).replace("。", "。\n")
+        transcription_text = self._normalize_text(transcription)
+
+        missing_headers = self._missing_summary_headers(summarized_text)
+        if missing_headers:
+            joined_headers = "、".join(missing_headers)
+            return {
+                "status": "error",
+                "message": f"要約の形式が不正です。次の見出しが不足しています: {joined_headers}",
+            }
+
         summary_id = self.db_operator.save_summary(
             summarized_text,
             str(name),
             self._normalize_memo(memo),
-            transcription
+            transcription_text
         )
         return {
             "status": "success",
             "summary": summarized_text,
-            "transcription": transcription,
+            "transcription": transcription_text,
             "summary_id": summary_id,
         }
 

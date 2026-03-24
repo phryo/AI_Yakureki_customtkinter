@@ -484,14 +484,14 @@ class App(ctk.CTk):
     def _set_summary_text_box_state(self, state: str):
         self.summary_text_box.configure(state=state)
 
-    def overwrite_save_summary(self):
+    def _save_summary_without_log(self) -> bool:
         summary_id = self.current_summary_id
         if not summary_id:
             self.log('更新対象の要約が選択されていません。')
-            return
+            return False
         if self.current_summary_display_mode == self.SUMMARY_MODE_TRANSCRIPTION:
             self.log("文字起こしは保存対象外です。表示を要約に切り替えて保存してください。")
-            return
+            return False
         current_content = self._read_summary_text_box()
         self.current_summary_content = current_content
         self.db_thread = threading.Thread(
@@ -500,6 +500,11 @@ class App(ctk.CTk):
             daemon=True
         )
         self.db_thread.start()
+        return True
+
+    def overwrite_save_summary(self):
+        if self._save_summary_without_log():
+            self.log('上書き保存しました。')
 
     # 録音関連
     def start_recording(self):
@@ -644,7 +649,8 @@ class App(ctk.CTk):
             self.log("文字起こし表示中は自動ペーストできません。要約に切り替えてください。")
             return
         text = self._read_summary_text_box()
-        self.overwrite_save_summary()
+        if not self._save_summary_without_log():
+            return
         self.log('自動ペーストしています。')
         result = self.controller.auto_paste(text)
         if result.get('status') == 'success':

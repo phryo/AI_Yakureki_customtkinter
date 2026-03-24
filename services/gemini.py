@@ -8,10 +8,7 @@ from settings import setting
 
 class Gemini:
     def __init__(self):
-        self.client = genai.Client(
-            # vertexai=True,
-            # location='asia-northeast1'
-        )
+        self.client = genai.Client()
         self.prompt = setting.PROMPT
 
     def summarize(self, recorded_file):

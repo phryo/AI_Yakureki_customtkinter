@@ -43,6 +43,16 @@ class DBOperator:
                     transcription TEXT
                 );
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS dictionaries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    UNIQUE(name, title)
+                );
+            """)
             self._ensure_summaries_transcription_column(cursor)
             conn.commit()
 
@@ -110,10 +120,29 @@ class DBOperator:
 
     def delete_name(self, name: str) -> None:
         """名前の削除"""
-        self._execute_with_retry(
-                "DELETE FROM names WHERE name = ?;",
-                (name,)
-        )
+        retries: int = 5
+        wait: float = 0.2
+        for i in range(retries):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "DELETE FROM names WHERE name = ?;",
+                        (name,)
+                    )
+                    cursor.execute(
+                        "DELETE FROM dictionaries WHERE name = ?;",
+                        (name,)
+                    )
+                    conn.commit()
+                    return
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    if i == retries - 1:
+                        raise
+                    time.sleep(wait)
+                else:
+                    raise
 
     def rename_name(self, old_name: str, new_name: str) -> None:
         """名前を変更し、過去要約の name も同時に更新する"""
@@ -129,6 +158,10 @@ class DBOperator:
                     )
                     cursor.execute(
                         "UPDATE summaries SET name = ? WHERE name = ?;",
+                        (new_name, old_name)
+                    )
+                    cursor.execute(
+                        "UPDATE dictionaries SET name = ? WHERE name = ?;",
                         (new_name, old_name)
                     )
                     conn.commit()
@@ -206,6 +239,87 @@ class DBOperator:
             cursor.execute(query, params)
             rows = cursor.fetchall()
         return rows
+
+    def load_dictionaries(self, name: Optional[str] = None) -> List[Tuple]:
+        """辞書のリストを取得"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+
+            base_query = """
+                SELECT id, name, title, content, created_at
+                FROM dictionaries
+            """
+            params: list = []
+
+            if name:
+                query = base_query + " WHERE name = ?"
+                params.append(name)
+            else:
+                query = base_query
+
+            query += " ORDER BY created_at DESC, id DESC;"
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+        return rows
+
+    def save_dictionary(self, name: Optional[str], title: str, content: str) -> int:
+        """辞書を保存し、作成されたIDを返す"""
+        retries: int = 5
+        wait: float = 0.2
+        for i in range(retries):
+            try:
+                with self._get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "INSERT INTO dictionaries (name, title, content) VALUES (?, ?, ?);",
+                        (name, title, content)
+                    )
+                    conn.commit()
+                    return int(cursor.lastrowid)
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e):
+                    if i == retries - 1:
+                        raise
+                    time.sleep(wait)
+                else:
+                    raise
+
+    def overwrite_save_dictionary(self, dictionary_id: int, name: Optional[str], title: str, content: str) -> None:
+        """辞書を更新して保存"""
+        self._execute_with_retry(
+            "UPDATE dictionaries SET name = ?, title = ?, content = ? WHERE id = ?;",
+            (name, title, content, dictionary_id)
+        )
+
+    def delete_dictionary(self, dictionary_id: int) -> None:
+        """辞書を削除"""
+        self._execute_with_retry(
+            "DELETE FROM dictionaries WHERE id = ?;",
+            (dictionary_id,)
+        )
+
+    def dictionary_title_exists(
+        self,
+        name: Optional[str],
+        title: str,
+        exclude_id: Optional[int] = None
+    ) -> bool:
+        """同一名義内に同名タイトルの辞書があるかを返す"""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            query = """
+                SELECT 1
+                FROM dictionaries
+                WHERE name = ? AND title = ?
+            """
+            params: list = [name, title]
+            if exclude_id is not None:
+                query += " AND id != ?"
+                params.append(exclude_id)
+            query += " LIMIT 1;"
+            cursor.execute(query, params)
+            row = cursor.fetchone()
+        return row is not None
 
     def overwrite_save_summary(self, summary_id, content: str) -> None:
         """修正した後の要約を更新して保存"""

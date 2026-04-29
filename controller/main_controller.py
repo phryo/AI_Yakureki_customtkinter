@@ -103,6 +103,23 @@ class MainController:
             "dropdown_values": list(sorted(summaries_dict.keys(), reverse=True)),
         }
 
+    def load_dictionaries(self, name: Optional[str]) -> dict[str, Any]:
+        dictionaries_list = self.db_operator.load_dictionaries(name or None)
+        dictionaries_dict = {
+            title: {
+                "id": _id,
+                "title": self._normalize_text(title),
+                "content": self._normalize_text(content),
+            }
+            for (_id, _name, title, content, _created_at) in dictionaries_list
+        }
+        return {
+            "status": "success",
+            "selected_name": name or "",
+            "dictionaries_dict": dictionaries_dict,
+            "dropdown_values": [row[2] for row in dictionaries_list],
+        }
+
     @staticmethod
     def get_summary_data(summaries_dict: dict[str, dict[str, Any]], selected_label: str) -> dict[str, Any]:
         data = summaries_dict.get(selected_label)
@@ -114,6 +131,84 @@ class MainController:
             "content": data.get("content") or "",
             "transcription": data.get("transcription") or "",
         }
+
+    @staticmethod
+    def get_dictionary_data(
+        dictionaries_dict: dict[str, dict[str, Any]],
+        selected_label: str
+    ) -> dict[str, Any]:
+        data = dictionaries_dict.get(selected_label)
+        if not data:
+            return {"status": "error", "message": "辞書データが取得できませんでした。"}
+        return {
+            "status": "success",
+            "id": data.get("id"),
+            "title": data.get("title") or "",
+            "content": data.get("content") or "",
+        }
+
+    def create_dictionary(self, name: str, title: str, content: str) -> dict[str, Any]:
+        input_name = (name or "").strip()
+        input_title = self._normalize_text(title)
+        input_content = str(content) if content is not None else ""
+
+        if not input_name:
+            return {"status": "error", "message": "辞書を登録する名前が選択されていません。"}
+        if not input_title:
+            return {"status": "error", "message": "辞書タイトルを入力してください。"}
+        if self.db_operator.dictionary_title_exists(input_name, input_title):
+            return {"status": "error", "message": "同じタイトルの辞書が既に登録されています。"}
+
+        try:
+            dictionary_id = self.db_operator.save_dictionary(input_name, input_title, input_content)
+        except sqlite3.IntegrityError:
+            return {"status": "error", "message": "同じタイトルの辞書が既に登録されています。"}
+
+        return {
+            "status": "success",
+            "message": f"辞書「{input_title}」を登録しました。",
+            "dictionary_id": dictionary_id,
+            "selected_label": input_title,
+        }
+
+    def overwrite_dictionary(self, dictionary_id: int, name: str, title: str, content: str) -> dict[str, Any]:
+        input_name = (name or "").strip()
+        input_title = self._normalize_text(title)
+        input_content = str(content) if content is not None else ""
+
+        if not input_name:
+            return {"status": "error", "message": "辞書を保存する名前が選択されていません。"}
+        if not dictionary_id:
+            return {"status": "error", "message": "更新対象の辞書が選択されていません。"}
+        if not input_title:
+            return {"status": "error", "message": "辞書タイトルを入力してください。"}
+        if self.db_operator.dictionary_title_exists(input_name, input_title, exclude_id=dictionary_id):
+            return {"status": "error", "message": "同じタイトルの辞書が既に登録されています。"}
+
+        try:
+            self.db_operator.overwrite_save_dictionary(dictionary_id, input_name, input_title, input_content)
+        except sqlite3.IntegrityError:
+            return {"status": "error", "message": "同じタイトルの辞書が既に登録されています。"}
+
+        return {
+            "status": "success",
+            "message": f"辞書「{input_title}」を上書き保存しました。",
+            "dictionary_id": dictionary_id,
+            "selected_label": input_title,
+        }
+
+    def delete_dictionary(self, dictionary_id: int, title: str) -> dict[str, Any]:
+        if not dictionary_id:
+            return {"status": "error", "message": "削除対象の辞書が選択されていません。"}
+
+        self.db_operator.delete_dictionary(dictionary_id)
+        return {
+            "status": "success",
+            "message": f"辞書「{self._normalize_text(title)}」を削除しました。",
+        }
+
+    def copy_text(self, text: str) -> dict[str, Any]:
+        return self.auto_paste_service.copy_text(text)
 
     @staticmethod
     def _normalize_memo(memo: Any) -> Optional[str]:

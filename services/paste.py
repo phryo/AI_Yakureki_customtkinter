@@ -18,6 +18,14 @@ class AutoPaste:
         self.is_pasting = False
 
     @staticmethod
+    def copy_text(text: str) -> dict:
+        copied_text = str(text) if text is not None else ""
+        if not copied_text.strip():
+            return {'status': 'error', 'message': 'コピーする内容がありません。'}
+        pyperclip.copy(copied_text)
+        return {'status': 'success', 'message': 'クリップボードにコピーしました。'}
+
+    @staticmethod
     def split_sections(text: str) -> dict:
         """
         【見出し】ごとに文章を分割して辞書にまとめる
@@ -74,7 +82,9 @@ class AutoPaste:
 
             if section_title not in summary_dict:
                 raise ValueError(f'「{section_title}」が見つかりません。')
-            pyperclip.copy(summary_dict[section_title])
+            copy_result = self.copy_text(summary_dict[section_title])
+            if copy_result.get('status') != 'success':
+                raise ValueError(copy_result.get('message'))
 
             if platform.system() == 'Darwin':  # macOS
                 pyautogui.hotkey('command', 'v')

@@ -13,8 +13,8 @@ import ui.widgets
 
 
 class App(ctk.CTk):
-    SUMMARY_MODE_SUMMARY = "要約"
-    SUMMARY_MODE_TRANSCRIPTION = "文字起こし"
+    VIEW_MODE_SUMMARY = "要約モード"
+    VIEW_MODE_DICTIONARY = "辞書登録モード"
 
     def __init__(self):
         super().__init__()
@@ -62,11 +62,21 @@ class App(ctk.CTk):
         self.selected_name = self.names_list[0] if self.names_list else ""
 
         self.summaries_dict = {}
+        self.summary_dropdown_values: list[str] = []
+        self.current_summary_label = ""
 
         self.current_summary_id = None
         self.current_summary_content = ""
         self.current_summary_transcription = ""
-        self.current_summary_display_mode = self.SUMMARY_MODE_SUMMARY
+
+        self.dictionaries_dict = {}
+        self.dictionary_dropdown_values: list[str] = []
+        self.current_dictionary_label = ""
+        self.current_dictionary_id = None
+        self.current_dictionary_title = ""
+        self.current_dictionary_content = ""
+
+        self.current_view_mode = self.VIEW_MODE_SUMMARY
 
         # ウィジェット（上から順番）
         self.btn_record_start = None
@@ -86,7 +96,13 @@ class App(ctk.CTk):
         self.btn_load_summaries = None
         self.summary_label = None
         self.summary_text_box = None
+        self.dictionary_title_frame = None
+        self.dictionary_title_label = None
+        self.dictionary_title_entry = None
+        self.dictionary_content_text_box = None
         self.btn_paste = None
+        self.btn_create_dictionary = None
+        self.btn_delete_dictionary_item = None
         self.btn_update_summary = None
         self.log_label = None
         self.log_box = None
@@ -212,6 +228,7 @@ class App(ctk.CTk):
 
         # ===要約再読み込み===
         summaries_title_list = self.controller.load_today_summary_titles()
+        self.summary_dropdown_values = summaries_title_list[:]
 
         self.frame_load_summaries = ctk.CTkFrame(self)
         self.frame_load_summaries.grid(row=3, column=0, padx=5, pady=5, sticky="w")
@@ -227,14 +244,14 @@ class App(ctk.CTk):
             self.frame_load_summaries,
             width=200, height=30,
             text="要約の読み込み（日付、名前指定）",
-            command=self.load_summaries_list
+            command=self.load_current_mode_items
         )
         self.btn_load_summaries.grid(row=0, column=1, padx=5, pady=5, sticky="w")
 
-        self.dropdown_summary_display_mode = ui.widgets.CenteredDropdown(
+        self.dropdown_summary_display_mode = ctk.CTkComboBox(
             self.frame_load_summaries,
-            values=[self.SUMMARY_MODE_SUMMARY, self.SUMMARY_MODE_TRANSCRIPTION],
-            command=self.on_summary_display_mode_changed,
+            values=[self.VIEW_MODE_SUMMARY, self.VIEW_MODE_DICTIONARY],
+            command=self.on_view_mode_changed,
             width=100,
         )
         self.dropdown_summary_display_mode.grid(row=0, column=2, padx=5, pady=5, sticky="w")
@@ -244,15 +261,35 @@ class App(ctk.CTk):
         self.frame_summary = ctk.CTkFrame(self)
         self.frame_summary.grid(row=4, column=0, padx=5, pady=5, sticky="nsew")
         self.frame_summary.grid_columnconfigure(0, weight=1)  # 横方向
-        self.frame_summary.grid_rowconfigure(0, weight=1)     # summary_text_box の行
+        self.frame_summary.grid_rowconfigure(1, weight=1)
+
+        self.dictionary_title_frame = ctk.CTkFrame(
+            self.frame_summary,
+            fg_color="transparent",
+            border_width=0,
+        )
+        self.dictionary_title_frame.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
+        self.dictionary_title_frame.grid_columnconfigure(1, weight=1)
+
+        self.dictionary_title_label = ctk.CTkLabel(self.dictionary_title_frame, text="タイトル：")
+        self.dictionary_title_label.grid(row=0, column=0, padx=(0, 5), pady=0, sticky="w")
+
+        self.dictionary_title_entry = ctk.CTkEntry(
+            self.dictionary_title_frame,
+            placeholder_text="辞書タイトル",
+        )
+        self.dictionary_title_entry.grid(row=0, column=1, padx=0, pady=0, sticky="ew")
 
         self.summary_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
-        self.summary_text_box.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="nsew")
+        self.summary_text_box.grid(row=1, column=0, padx=10, pady=(10, 0), sticky="nsew")
+
+        self.dictionary_content_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
+        self.dictionary_content_text_box.grid(row=1, column=0, padx=10, pady=(0, 0), sticky="nsew")
 
         self.frame_btn_in_summary = ctk.CTkFrame(self.frame_summary,
                                                  fg_color="transparent",
                                                  border_width=0,)
-        self.frame_btn_in_summary.grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        self.frame_btn_in_summary.grid(row=2, column=0, padx=5, pady=5, sticky="w")
 
         # 自動ペーストボタン
         self.btn_paste = ctk.CTkButton(
@@ -262,6 +299,27 @@ class App(ctk.CTk):
         )
         self.btn_paste.grid(row=0, column=0, padx=5, pady=5, sticky="w")
 
+        self.btn_create_dictionary = ctk.CTkButton(
+            self.frame_btn_in_summary,
+            text="新規登録",
+            width=80,
+            command=self.create_dictionary
+        )
+        self.btn_create_dictionary.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        self.btn_delete_dictionary_item = ctk.CTkButton(
+            self.frame_btn_in_summary,
+            text="削除",
+            width=60,
+            fg_color="transparent",
+            border_color="#666666",
+            border_width=1,
+            text_color="#444444",
+            hover_color="#DDDDDD",
+            command=self.delete_dictionary
+        )
+        self.btn_delete_dictionary_item.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
         # 要約保存ボタン
         self.btn_update_summary = ctk.CTkButton(
             self.frame_btn_in_summary,
@@ -269,7 +327,7 @@ class App(ctk.CTk):
             width=50,
             command=self.overwrite_save_summary
         )
-        self.btn_update_summary.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        self.btn_update_summary.grid(row=0, column=3, padx=5, pady=5, sticky="w")
 
 
         # ===== ログ =====
@@ -282,6 +340,7 @@ class App(ctk.CTk):
 
         self.log_box = ctk.CTkTextbox(self.frame_log, height=70)
         self.log_box.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="ew")
+        self._sync_current_view_mode()
 
 
     # ====== 関数 ======
@@ -323,6 +382,8 @@ class App(ctk.CTk):
     def select_name(self, name: str):
         self.selected_name = name
         self.update_name_button_styles()
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            self.load_dictionaries_list()
 
     def update_name_button_styles(self):
         for name, btn in self.name_buttons.items():
@@ -342,6 +403,7 @@ class App(ctk.CTk):
         self.selected_name = result.get("selected_name", "")
         self.name_entry.delete(0, "end")
         self.render_name_buttons()
+        self._refresh_current_mode_after_name_change()
 
     def delete_name(self):
         """投薬者の削除"""
@@ -363,6 +425,7 @@ class App(ctk.CTk):
         self.names_list = result.get("names_list", [])
         self.selected_name = result.get("selected_name", "")
         self.render_name_buttons()
+        self._refresh_current_mode_after_name_change()
 
     def rename_selected_name(self):
         current_name = (self.selected_name or "").strip()
@@ -395,32 +458,70 @@ class App(ctk.CTk):
         self.selected_name = result.get("selected_name", "")
         self.name_entry.delete(0, "end")
         self.render_name_buttons()
+        self._refresh_current_mode_after_name_change()
 
-    # 要約関連
+    def _refresh_current_mode_after_name_change(self):
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            self.load_dictionaries_list()
+
+    # 要約・辞書関連
+    def load_current_mode_items(self):
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            self.load_dictionaries_list()
+        else:
+            self.load_summaries_list()
+
     def load_summaries_list(self):
         """要約のリストをDBから読み込む"""
-        # 例： '2025-11-23' という文字列が入っている
         target_date = self.date_selector.get_date_str().strip()
         name = self.selected_name
 
         result = self.controller.load_summaries(target_date, name)
         self.summaries_dict = result.get("summaries_dict", {})
-        self.dropdown_summary.configure_values(result.get("dropdown_values", []))
+        self.summary_dropdown_values = result.get("dropdown_values", [])
+        self._apply_current_summary_selection()
         self.log(f"{result.get('target_date')} | {name}の要約を読み込みました。")
 
+    def load_dictionaries_list(self, preferred_label: str | None = None):
+        """選択中の投薬者に紐づく辞書のリストを読み込む"""
+        name = self.selected_name
+        result = self.controller.load_dictionaries(name)
+        self.dictionaries_dict = result.get("dictionaries_dict", {})
+        self.dictionary_dropdown_values = result.get("dropdown_values", [])
+        if preferred_label is not None:
+            self.current_dictionary_label = preferred_label
+        self._apply_current_dictionary_selection()
+        self.log(f"{name}の辞書を読み込みました。")
+
     def on_selected_summary(self, selected_label: str):
-        """ドロップダウンで要約を選択したときに呼ばれる"""
+        """ドロップダウン選択時に、モードに応じた内容を表示する"""
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            result = self.controller.get_dictionary_data(self.dictionaries_dict, selected_label)
+            if result.get("status") != "success":
+                self.log(result.get("message"))
+                return
+
+            self.current_dictionary_label = selected_label
+            self._set_current_dictionary_data(
+                dictionary_id=result.get("id"),
+                title=result.get("title", ""),
+                content=result.get("content", ""),
+            )
+            self._render_current_view_text()
+            return
+
         result = self.controller.get_summary_data(self.summaries_dict, selected_label)
         if result.get("status") != "success":
             self.log(result.get("message"))
             return
 
+        self.current_summary_label = selected_label
         self._set_current_summary_data(
             summary_id=result.get("id"),
             content=result.get("content", ""),
             transcription=result.get("transcription", ""),
         )
-        self._render_current_summary_text()
+        self._render_current_view_text()
 
     def _read_summary_text_box(self) -> str:
         return self.summary_text_box.get("1.0", "end-1c")
@@ -429,68 +530,144 @@ class App(ctk.CTk):
         self.summary_text_box.delete("1.0", "end")
         self.summary_text_box.insert("1.0", text or "")
 
+    def _read_dictionary_title(self) -> str:
+        return self.dictionary_title_entry.get().strip()
+
+    def _write_dictionary_title(self, text: str):
+        self.dictionary_title_entry.delete(0, "end")
+        self.dictionary_title_entry.insert(0, text or "")
+
+    def _read_dictionary_content_text_box(self) -> str:
+        return self.dictionary_content_text_box.get("1.0", "end-1c")
+
+    def _write_dictionary_content_text_box(self, text: str):
+        self.dictionary_content_text_box.delete("1.0", "end")
+        self.dictionary_content_text_box.insert("1.0", text or "")
+
     def _set_current_summary_data(self, summary_id: int | None, content: str, transcription: str):
         self.current_summary_id = summary_id
         self.current_summary_content = content or ""
         self.current_summary_transcription = transcription or ""
 
-    def _get_summary_text_by_mode(self, mode: str) -> str:
-        if mode == self.SUMMARY_MODE_TRANSCRIPTION:
-            return self.current_summary_transcription
-        return self.current_summary_content
+    def _clear_current_summary_data(self):
+        self.current_summary_label = ""
+        self._set_current_summary_data(summary_id=None, content="", transcription="")
 
-    def _cache_edited_text_to_current_mode(self):
-        if not self.current_summary_id:
-            return
-        current_text = self._read_summary_text_box()
-        if self.current_summary_display_mode == self.SUMMARY_MODE_TRANSCRIPTION:
-            self.current_summary_transcription = current_text
-        else:
-            self.current_summary_content = current_text
+    def _set_current_dictionary_data(self, dictionary_id: int | None, title: str, content: str):
+        self.current_dictionary_id = dictionary_id
+        self.current_dictionary_title = title or ""
+        self.current_dictionary_content = content or ""
 
-    def _sync_display_mode_dropdown(self):
+    def _clear_current_dictionary_data(self):
+        self.current_dictionary_label = ""
+        self._set_current_dictionary_data(dictionary_id=None, title="", content="")
+
+    def _sync_view_mode_dropdown(self):
         if self.dropdown_summary_display_mode is None:
             return
-        self.dropdown_summary_display_mode.var.set(self.current_summary_display_mode)
+        self.dropdown_summary_display_mode.set(self.current_view_mode)
 
-    def _render_current_summary_text(self):
-        self._write_summary_text_box(
-            self._get_summary_text_by_mode(self.current_summary_display_mode)
+    def _set_dropdown_selection(self, values: list[str], selected_label: str):
+        self.dropdown_summary.configure_values(values)
+        if selected_label and selected_label in values:
+            self.dropdown_summary.var.set(selected_label)
+        elif values:
+            self.dropdown_summary.var.set(values[0])
+        else:
+            self.dropdown_summary.var.set("")
+
+    def _render_current_view_text(self):
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            self._write_dictionary_title(self.current_dictionary_title)
+            self._write_dictionary_content_text_box(self.current_dictionary_content)
+        else:
+            self._write_summary_text_box(self.current_summary_content)
+
+    def _sync_current_view_mode(self):
+        is_dictionary_mode = self.current_view_mode == self.VIEW_MODE_DICTIONARY
+        self._sync_view_mode_dropdown()
+        self.btn_load_summaries.configure(
+            text="辞書の読み込み（名前指定）" if is_dictionary_mode else "要約の読み込み（日付、名前指定）"
         )
+        self.btn_paste.configure(
+            text="全コピー" if is_dictionary_mode else "自動ペースト",
+            state="normal"
+        )
+        self.btn_update_summary.configure(state="normal")
 
-    def _switch_summary_display_mode(self, mode: str, cache_current_text: bool = True):
+        if is_dictionary_mode:
+            self.dictionary_title_frame.grid()
+            self.dictionary_content_text_box.grid()
+            self.summary_text_box.grid_remove()
+            self.btn_create_dictionary.grid()
+            self.btn_delete_dictionary_item.grid()
+        else:
+            self.dictionary_title_frame.grid_remove()
+            self.dictionary_content_text_box.grid_remove()
+            self.summary_text_box.grid()
+            self.btn_create_dictionary.grid_remove()
+            self.btn_delete_dictionary_item.grid_remove()
+
+        values = self.dictionary_dropdown_values if is_dictionary_mode else self.summary_dropdown_values
+        selected_label = self.current_dictionary_label if is_dictionary_mode else self.current_summary_label
+        self._set_dropdown_selection(values, selected_label)
+        self._render_current_view_text()
+
+    def _switch_view_mode(self, mode: str, should_reload: bool = True):
         normalized_mode = (
-            mode if mode in (self.SUMMARY_MODE_SUMMARY, self.SUMMARY_MODE_TRANSCRIPTION)
-            else self.SUMMARY_MODE_SUMMARY
+            mode if mode in (self.VIEW_MODE_SUMMARY, self.VIEW_MODE_DICTIONARY)
+            else self.VIEW_MODE_SUMMARY
         )
-        if cache_current_text:
-            self._cache_edited_text_to_current_mode()
-        self.current_summary_display_mode = normalized_mode
-        self._sync_display_mode_dropdown()
-        self._render_current_summary_text()
+        self.current_view_mode = normalized_mode
+        self._sync_current_view_mode()
+        if should_reload and self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            self.load_dictionaries_list()
+            return
 
-    def on_summary_display_mode_changed(self, selected_mode: str):
-        self._switch_summary_display_mode(selected_mode, cache_current_text=True)
+    def on_view_mode_changed(self, selected_mode: str):
+        self._switch_view_mode(selected_mode, should_reload=True)
 
     def _apply_summary_result(self, summarized_text: str, summary_id: int, transcription: str):
         """要約内容と最新IDをメインスレッドで反映する"""
+        self.current_summary_label = ""
         self._set_current_summary_data(
             summary_id=summary_id,
             content=summarized_text,
             transcription=transcription,
         )
-        self._switch_summary_display_mode(self.SUMMARY_MODE_SUMMARY, cache_current_text=False)
+        self._switch_view_mode(self.VIEW_MODE_SUMMARY, should_reload=False)
 
     def _set_summary_text_box_state(self, state: str):
         self.summary_text_box.configure(state=state)
+
+    def _apply_current_summary_selection(self):
+        selected_label = self.current_summary_label if self.current_summary_label in self.summary_dropdown_values else ""
+        if not selected_label and self.summary_dropdown_values:
+            selected_label = self.summary_dropdown_values[0]
+        if selected_label:
+            self.on_selected_summary(selected_label)
+            self._set_dropdown_selection(self.summary_dropdown_values, selected_label)
+            return
+        self._clear_current_summary_data()
+        if self.current_view_mode == self.VIEW_MODE_SUMMARY:
+            self._sync_current_view_mode()
+
+    def _apply_current_dictionary_selection(self):
+        selected_label = self.current_dictionary_label if self.current_dictionary_label in self.dictionary_dropdown_values else ""
+        if not selected_label and self.dictionary_dropdown_values:
+            selected_label = self.dictionary_dropdown_values[0]
+        if selected_label:
+            self.on_selected_summary(selected_label)
+            self._set_dropdown_selection(self.dictionary_dropdown_values, selected_label)
+            return
+        self._clear_current_dictionary_data()
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            self._sync_current_view_mode()
 
     def _save_summary_without_log(self) -> bool:
         summary_id = self.current_summary_id
         if not summary_id:
             self.log('更新対象の要約が選択されていません。')
-            return False
-        if self.current_summary_display_mode == self.SUMMARY_MODE_TRANSCRIPTION:
-            self.log("文字起こしは保存対象外です。表示を要約に切り替えて保存してください。")
             return False
         current_content = self._read_summary_text_box()
         self.current_summary_content = current_content
@@ -502,9 +679,70 @@ class App(ctk.CTk):
         self.db_thread.start()
         return True
 
+    def _save_dictionary_without_log(self) -> bool:
+        dictionary_id = self.current_dictionary_id
+        title = self._read_dictionary_title()
+        content = self._read_dictionary_content_text_box()
+
+        result = self.controller.overwrite_dictionary(
+            dictionary_id or 0,
+            self.selected_name,
+            title,
+            content,
+        )
+        if result.get("status") != "success":
+            self.log(result.get("message"))
+            return False
+
+        self.current_dictionary_label = result.get("selected_label", "")
+        self.load_dictionaries_list(preferred_label=self.current_dictionary_label)
+        return True
+
     def overwrite_save_summary(self):
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            if self._save_dictionary_without_log():
+                self.log('辞書を上書き保存しました。')
+            return
+
         if self._save_summary_without_log():
             self.log('上書き保存しました。')
+
+    def create_dictionary(self):
+        result = self.controller.create_dictionary(
+            self.selected_name,
+            self._read_dictionary_title(),
+            self._read_dictionary_content_text_box(),
+        )
+        if result.get("status") != "success":
+            self.log(result.get("message"))
+            return
+
+        self.current_dictionary_label = result.get("selected_label", "")
+        self.load_dictionaries_list(preferred_label=self.current_dictionary_label)
+        self.log(result.get("message"))
+
+    def delete_dictionary(self):
+        dictionary_id = self.current_dictionary_id
+        title = self.current_dictionary_title or self._read_dictionary_title()
+        if not dictionary_id:
+            self.log("削除対象の辞書が選択されていません。")
+            return
+
+        possible_delete = tkinter.messagebox.askokcancel(
+            "確認",
+            f"辞書「{title}」を削除してもよろしいですか？"
+        )
+        if not possible_delete:
+            return
+
+        result = self.controller.delete_dictionary(dictionary_id, title)
+        if result.get("status") != "success":
+            self.log(result.get("message"))
+            return
+
+        self.current_dictionary_label = ""
+        self.load_dictionaries_list(preferred_label="")
+        self.log(result.get("message"))
 
     # 録音関連
     def start_recording(self):
@@ -645,8 +883,12 @@ class App(ctk.CTk):
 
     # 自動ペースト
     def auto_paste(self):
-        if self.current_summary_display_mode == self.SUMMARY_MODE_TRANSCRIPTION:
-            self.log("文字起こし表示中は自動ペーストできません。要約に切り替えてください。")
+        if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
+            result = self.controller.copy_text(self._read_dictionary_content_text_box())
+            if result.get('status') == 'success':
+                self.log(result.get('message'))
+            else:
+                self.log(f"コピーエラー: {result.get('message')}")
             return
         text = self._read_summary_text_box()
         if not self._save_summary_without_log():

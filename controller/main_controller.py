@@ -20,6 +20,12 @@ class MainController:
         self.gemini = gemini or Gemini()
         self.auto_paste_service = auto_paste or AutoPaste()
 
+    def is_gemini_available(self) -> bool:
+        return self.gemini.is_available()
+
+    def get_gemini_disabled_reason(self) -> str:
+        return self.gemini.get_disabled_reason()
+
     def load_names_list(self) -> list[str]:
         return self.db_operator.load_names_list()
 
@@ -250,6 +256,12 @@ class MainController:
 
 
     def summarize_and_save(self, recorded_file: str, name: str, memo: Any) -> dict[str, Any]:
+        if not self.is_gemini_available():
+            return {
+                "status": "error",
+                "message": self.get_gemini_disabled_reason(),
+            }
+
         result = self.gemini.summarize(recorded_file)
         if result.get("status") != "success":
             return {

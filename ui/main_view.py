@@ -45,6 +45,9 @@ class App(ctk.CTk):
         )
         self.gemini_worker_thread.start()
 
+        self.is_gemini_available = self.controller.is_gemini_available()
+        self.gemini_disabled_reason = self.controller.get_gemini_disabled_reason()
+
         self.title("Gemini　AI薬歴")
         self.geometry("600x1000")
         # self.attributes('-topmost', True)
@@ -108,6 +111,7 @@ class App(ctk.CTk):
         self.log_box = None
 
         self.create_widgets()
+        self._apply_recording_availability()
 
     def create_widgets(self):
         """
@@ -342,9 +346,25 @@ class App(ctk.CTk):
         self.log_box.grid(row=1, column=0, padx=10, pady=(0, 5), sticky="ew")
         self._sync_current_view_mode()
 
+    def _apply_recording_availability(self):
+        if self.is_gemini_available:
+            return
+
+        self.btn_record_start.configure(state="disabled")
+        self.btn_record_stop.configure(state="disabled")
+        self.log(self.gemini_disabled_reason)
+
+    def _can_use_recording(self) -> bool:
+        if self.is_gemini_available:
+            return True
+
+        return False
+
 
     # ====== 関数 ======
     def on_f1(self, event=None):
+        if not self._can_use_recording():
+            return
         self.toggle_recording()
 
     def toggle_recording(self):
@@ -747,6 +767,9 @@ class App(ctk.CTk):
     # 録音関連
     def start_recording(self):
         """threadにて録音開始 """
+        if not self._can_use_recording():
+            return
+
         if self.is_recording:
             return
 

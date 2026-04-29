@@ -1,4 +1,3 @@
-
 from google import genai
 from google.genai.errors import APIError
 from google.genai import types
@@ -8,10 +7,30 @@ from settings import setting
 
 class Gemini:
     def __init__(self):
-        self.client = genai.Client()
         self.prompt = setting.PROMPT
+        self.client = None
+        self.disabled_reason = ""
+
+        try:
+            self.client = genai.Client()
+        except Exception as e:
+            self.disabled_reason = f"API_KEYが見つからないため、録音機能を使用できません。({e})"
+
+    def is_available(self) -> bool:
+        return self.client is not None
+
+    def get_disabled_reason(self) -> str:
+        if self.disabled_reason:
+            return self.disabled_reason
+        return "Geminiを利用できないため、録音機能を使用できません。"
 
     def summarize(self, recorded_file):
+        if not self.is_available():
+            return {
+                "status": "error",
+                "message": self.get_disabled_reason(),
+            }
+
         uploaded_file = None
         try:
             uploaded_file = self.client.files.upload(file=recorded_file)

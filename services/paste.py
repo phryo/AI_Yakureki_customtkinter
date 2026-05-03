@@ -42,7 +42,7 @@ class AutoPaste:
 
         return summary_dict
 
-    def paste(self, text):
+    def paste(self, text: str, paste_speed: float) -> dict:
         if not text:
             return {'status': 'error', 'message': 'ペーストする内容がありません。'}
         self.is_pasting = True
@@ -77,8 +77,9 @@ class AutoPaste:
 
             pyautogui.hotkey('shift', ';', interval=0.1)
             pyautogui.press(key)
+            time.sleep(0.1 / paste_speed)
             pyautogui.press('enter')
-            time.sleep(0.5)
+            time.sleep(0.5 / paste_speed)
 
             if section_title not in summary_dict:
                 raise ValueError(f'「{section_title}」が見つかりません。')
@@ -90,9 +91,9 @@ class AutoPaste:
                 pyautogui.hotkey('command', 'v')
             else:  # Windows / Linux
                 pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.3)
+            time.sleep(0.3 / paste_speed)
             pyautogui.press('enter')
-            time.sleep(0.3)
+            time.sleep(0.5 / paste_speed)
 
         try:
             summary_dict = self.split_sections(text)

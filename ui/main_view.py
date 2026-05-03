@@ -104,6 +104,7 @@ class App(ctk.CTk):
         self.dictionary_title_entry = None
         self.dictionary_content_text_box = None
         self.btn_paste = None
+        self.dropdown_change_paste_speed = None
         self.btn_create_dictionary = None
         self.btn_delete_dictionary_item = None
         self.btn_update_summary = None
@@ -299,9 +300,25 @@ class App(ctk.CTk):
         self.btn_paste = ctk.CTkButton(
             self.frame_btn_in_summary,
             text="自動ペースト",
+            width=120,
             command=self.auto_paste
         )
         self.btn_paste.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+
+        # ペースト速度変更
+        label_change_paste_speed = ctk.CTkLabel(
+            self.frame_btn_in_summary,
+            text="速度調整:"
+        )
+        label_change_paste_speed.grid(row=0, column=1, padx=5, pady=5, sticky="e")
+
+        self.dropdown_change_paste_speed = ui.widgets.CenteredDropdown(
+            self.frame_btn_in_summary,
+            values=["x" + str(round(i*0.1, 1)) for i in range(10, 0, -1)],
+            width=60
+        )
+        self.dropdown_change_paste_speed.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        self.dropdown_change_paste_speed.set("1.0")
 
         self.btn_create_dictionary = ctk.CTkButton(
             self.frame_btn_in_summary,
@@ -619,6 +636,7 @@ class App(ctk.CTk):
             self.dictionary_title_frame.grid()
             self.dictionary_content_text_box.grid()
             self.summary_text_box.grid_remove()
+            self.dropdown_change_paste_speed.grid_remove()
             self.btn_create_dictionary.grid()
             self.btn_delete_dictionary_item.grid()
         else:
@@ -627,6 +645,7 @@ class App(ctk.CTk):
             self.summary_text_box.grid()
             self.btn_create_dictionary.grid_remove()
             self.btn_delete_dictionary_item.grid_remove()
+            self.dropdown_change_paste_speed.grid()
 
         values = self.dictionary_dropdown_values if is_dictionary_mode else self.summary_dropdown_values
         selected_label = self.current_dictionary_label if is_dictionary_mode else self.current_summary_label
@@ -917,7 +936,8 @@ class App(ctk.CTk):
         if not self._save_summary_without_log():
             return
         self.log('自動ペーストしています。')
-        result = self.controller.auto_paste(text)
+        paste_speed = float(self.dropdown_change_paste_speed.get()[1:])
+        result = self.controller.auto_paste(text, paste_speed=paste_speed)
         if result.get('status') == 'success':
             self.log(result.get('message'))
         else:

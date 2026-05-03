@@ -298,5 +298,5 @@ class MainController:
     def overwrite_summary(self, summary_id: int, content: str) -> None:
         self.db_operator.overwrite_save_summary(summary_id, content)
 
-    def auto_paste(self, text: str) -> dict[str, Any]:
-        return self.auto_paste_service.paste(text)
+    def auto_paste(self, text: str, paste_speed: float) -> dict[str, Any]:
+        return self.auto_paste_service.paste(text, paste_speed=paste_speed) # test

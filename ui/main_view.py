@@ -1,5 +1,6 @@
 import os
 import queue
+import re
 import threading
 import time
 import tkinter
@@ -99,7 +100,9 @@ class App(ctk.CTk):
         self.dropdown_summary_display_mode = None
         self.btn_load_summaries = None
         self.summary_label = None
-        self.summary_text_box = None
+        self.summary_section_frame = None
+        self.summary_section_widgets: dict[str, ctk.CTkTextbox] = {}
+        self.btn_section_copy: dict[str, ctk.CTkButton] = {}
         self.dictionary_title_frame = None
         self.dictionary_title_label = None
         self.dictionary_title_entry = None
@@ -284,8 +287,45 @@ class App(ctk.CTk):
         )
         self.dictionary_title_entry.grid(row=0, column=1, padx=0, pady=0, sticky="ew")
 
-        self.summary_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
-        self.summary_text_box.grid(row=1, column=0, padx=10, pady=(10, 0), sticky="nsew")
+        self.summary_section_frame = ctk.CTkScrollableFrame(
+            self.frame_summary,
+            fg_color="transparent",
+            border_width=0,
+        )
+        self.summary_section_frame.grid(row=1, column=0, padx=5, pady=3, sticky="nsew")
+        self.summary_section_frame.grid_columnconfigure(1, weight=1)
+
+        section_heights = {
+            "服薬状況": 50,
+            "副作用": 50,
+            "計画": 36,
+        }
+        default_section_height = 100
+        for row_index, (_, section_title) in enumerate(settings.setting.SECTION_MAPPING):
+            section_label = ctk.CTkLabel(
+                self.summary_section_frame,
+                text=section_title,
+                width=50
+            )
+            section_label.grid(row=row_index * 2, column=0, padx=0, pady=0, sticky="ew")
+
+            btn_section_copy = ctk.CTkButton(
+                self.summary_section_frame,
+                text="コピー",
+                height=18,
+                width=40,
+                command=lambda: self._read_a_summary_section_from_widget(section_title)
+            )
+            btn_section_copy.grid(row=row_index * 2 + 1, column=0, padx=5, pady=0, sticky="new")
+            self.btn_section_copy[section_title] = btn_section_copy
+
+            section_text_box = ctk.CTkTextbox(
+                self.summary_section_frame,
+                height=section_heights.get(section_title, default_section_height),
+            )
+            section_text_box.grid(row=row_index * 2, column=1, padx=5, pady=5, rowspan=2, sticky="ew")
+            self.summary_section_widgets[section_title] = section_text_box
+            self.summary_section_widgets[section_title]._textbox.bind("<Tab>", self.on_tab_key_down)
 
         self.dictionary_content_text_box = ctk.CTkTextbox(self.frame_summary, height=150)
         self.dictionary_content_text_box.grid(row=1, column=0, padx=10, pady=(0, 0), sticky="nsew")
@@ -385,6 +425,31 @@ class App(ctk.CTk):
         if not self._can_use_recording():
             return
         self.toggle_recording()
+
+    def on_tab_key_down(self, event):
+        """tabキーでsummary_sectionを切り替える"""
+        focus_widget_list = [section for _, section in settings.setting.SECTION_MAPPING]
+        focused = self.focus_get()
+        focused_key = None
+        for key in focus_widget_list:
+            widget = self.summary_section_widgets[key]
+            if focused == widget._textbox:
+                focused_key = key
+                break
+
+        if focused_key is None:
+            return "break"
+
+        try:
+            current_index = focus_widget_list.index(focused_key)
+            next_key = focus_widget_list[current_index + 1]
+            self.summary_section_widgets[next_key]._textbox.focus_set()
+            return "break"
+        except IndexError:
+            next_key = focus_widget_list[0]
+            self.summary_section_widgets[next_key]._textbox.focus_set()
+            return "break"
+
 
     def toggle_recording(self):
         """録音の開始と停止を切り替える。"""
@@ -570,14 +635,59 @@ class App(ctk.CTk):
         )
         self._render_current_view_text()
 
-    def _read_summary_text_box(self) -> str:
-        """要約テキスト欄の内容を取得する。"""
-        return self.summary_text_box.get("1.0", "end-1c")
+    def _build_empty_summary_sections(self) -> dict[str, str]:
+        """要約5項目の空データを返す。"""
+        return {
+            section_title: ""
+            for _, section_title in settings.setting.SECTION_MAPPING
+        }
 
-    def _write_summary_text_box(self, text: str):
-        """要約テキスト欄へ内容を書き込む。"""
-        self.summary_text_box.delete("1.0", "end")
-        self.summary_text_box.insert("1.0", text or "")
+    def _split_summary_content(self, text: str) -> dict[str, str]:
+        """見出し付き要約文字列を5項目辞書へ分割する。"""
+        sections = self._build_empty_summary_sections()
+        if not text:
+            return sections
+
+        pattern = r"【(.+?)】\s*([\s\S]*?)(?=\n*【.+?】|\Z)"
+        for match in re.finditer(pattern, text):
+            section_title = match.group(1).strip()
+            if section_title not in sections:
+                continue
+            sections[section_title] = match.group(2).strip()
+        return sections
+
+    def _join_summary_sections(self, sections: dict[str, str]) -> str:
+        """5項目辞書を既存互換の見出し付き要約文字列へ再結合する。"""
+        parts = []
+        for _, section_title in settings.setting.SECTION_MAPPING:
+            body = (sections.get(section_title) or "").strip()
+            parts.append(f"【{section_title}】\n{body}")
+        return "\n\n".join(parts)
+
+    def _read_a_summary_section_from_widget(self, section_title: str) -> str:
+        text_box = self.summary_section_widgets[section_title]
+        self.log(f"{section_title} をコピーしました")
+        return text_box.get("1.0", "end-1c").strip()
+
+    def _read_summary_sections_from_widgets(self) -> dict[str, str]:
+        """5個の要約textboxから内容を取得する。"""
+        sections = self._build_empty_summary_sections()
+        for section_title, text_box in self.summary_section_widgets.items():
+            sections[section_title] = text_box.get("1.0", "end-1c").strip()
+        return sections
+
+    def _write_summary_sections_to_widgets(self, sections: dict[str, str]):
+        """5個の要約textboxへ内容を書き込む。"""
+        normalized_sections = self._build_empty_summary_sections()
+        normalized_sections.update(sections or {})
+        for _, section_title in settings.setting.SECTION_MAPPING:
+            text_box = self.summary_section_widgets[section_title]
+            text_box.delete("1.0", "end")
+            text_box.insert("1.0", normalized_sections.get(section_title, ""))
+
+    def _read_summary_text(self) -> str:
+        """要約textbox群の内容を既存互換文字列として取得する。"""
+        return self._join_summary_sections(self._read_summary_sections_from_widgets())
 
     def _read_dictionary_title(self) -> str:
         """辞書タイトル欄の内容を取得する。"""
@@ -641,7 +751,9 @@ class App(ctk.CTk):
             self._write_dictionary_title(self.current_dictionary_title)
             self._write_dictionary_content_text_box(self.current_dictionary_content)
         else:
-            self._write_summary_text_box(self.current_summary_content)
+            self._write_summary_sections_to_widgets(
+                self._split_summary_content(self.current_summary_content)
+            )
 
     def _sync_current_view_mode(self):
         """現在の表示モードに合わせてUIを切り替える。"""
@@ -659,14 +771,14 @@ class App(ctk.CTk):
         if is_dictionary_mode:
             self.dictionary_title_frame.grid()
             self.dictionary_content_text_box.grid()
-            self.summary_text_box.grid_remove()
+            self.summary_section_frame.grid_remove()
             self.dropdown_change_paste_speed.grid_remove()
             self.btn_create_dictionary.grid()
             self.btn_delete_dictionary_item.grid()
         else:
             self.dictionary_title_frame.grid_remove()
             self.dictionary_content_text_box.grid_remove()
-            self.summary_text_box.grid()
+            self.summary_section_frame.grid()
             self.btn_create_dictionary.grid_remove()
             self.btn_delete_dictionary_item.grid_remove()
             self.dropdown_change_paste_speed.grid()
@@ -704,7 +816,8 @@ class App(ctk.CTk):
 
     def _set_summary_text_box_state(self, state: str):
         """要約テキスト欄の状態を変更する。"""
-        self.summary_text_box.configure(state=state)
+        for text_box in self.summary_section_widgets.values():
+            text_box.configure(state=state)
 
     def _apply_current_summary_selection(self):
         """現在の要約選択状態を画面へ適用する。"""
@@ -738,7 +851,7 @@ class App(ctk.CTk):
         if not summary_id:
             self.log('更新対象の要約が選択されていません。')
             return False
-        current_content = self._read_summary_text_box()
+        current_content = self._read_summary_text()
         self.current_summary_content = current_content
         self.db_thread = threading.Thread(
             target=self.controller.overwrite_summary,
@@ -965,9 +1078,9 @@ class App(ctk.CTk):
             else:
                 self.log(f"コピーエラー: {result.get('message')}")
             return
-        text = self._read_summary_text_box()
         if not self._save_summary_without_log():
             return
+        text = self.current_summary_content
         self.log('自動ペーストしています。')
         paste_speed = float(self.dropdown_change_paste_speed.get()[1:])
         result = self.controller.auto_paste(text, paste_speed=paste_speed)

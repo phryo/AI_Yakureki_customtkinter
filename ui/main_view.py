@@ -17,6 +17,7 @@ class App(ctk.CTk):
     VIEW_MODE_DICTIONARY = "辞書登録モード"
 
     def __init__(self):
+        """アプリ本体を初期化する。"""
         super().__init__()
 
         ctk.set_appearance_mode("system")
@@ -115,9 +116,7 @@ class App(ctk.CTk):
         self._apply_recording_availability()
 
     def create_widgets(self):
-        """
-        UI作成
-        """
+        """画面全体のUIを構築する。"""
         # ===== 録音ボタン =====
         self.frame_btn_recorder = ctk.CTkFrame(self)
         self.frame_btn_recorder.grid(row=0, column=0, padx=5, pady=5, sticky="w")
@@ -364,6 +363,7 @@ class App(ctk.CTk):
         self._sync_current_view_mode()
 
     def _apply_recording_availability(self):
+        """録音機能の利用可否をUIに反映する。"""
         if self.is_gemini_available:
             return
 
@@ -372,6 +372,7 @@ class App(ctk.CTk):
         self.log(self.gemini_disabled_reason)
 
     def _can_use_recording(self) -> bool:
+        """録音機能を利用できるか返す。"""
         if self.is_gemini_available:
             return True
 
@@ -380,11 +381,13 @@ class App(ctk.CTk):
 
     # ====== 関数 ======
     def on_f1(self, event=None):
+        """F1キー入力で録音状態を切り替える。"""
         if not self._can_use_recording():
             return
         self.toggle_recording()
 
     def toggle_recording(self):
+        """録音の開始と停止を切り替える。"""
         if self.is_recording:
             self.stop_recording()
         else:
@@ -392,12 +395,13 @@ class App(ctk.CTk):
 
     # ログ表示
     def log(self, text: str):
-        """ログ出力"""
+        """ログ欄にメッセージを表示する。"""
         self.log_box.insert("1.0", f'{text}\n')
         self.log_box.update()
 
     # 投薬者関連
     def render_name_buttons(self):
+        """投薬者ボタンを再描画する。"""
         for btn in self.name_buttons.values():
             btn.destroy()
         self.name_buttons.clear()
@@ -417,12 +421,14 @@ class App(ctk.CTk):
         self.update_name_button_styles()
 
     def select_name(self, name: str):
+        """投薬者を選択し、必要なら辞書一覧を更新する。"""
         self.selected_name = name
         self.update_name_button_styles()
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             self.load_dictionaries_list()
 
     def update_name_button_styles(self):
+        """選択中の投薬者ボタンの見た目を更新する。"""
         for name, btn in self.name_buttons.items():
             if name == self.selected_name:
                 btn.configure(fg_color="#1f6aa5", text_color="white", border_width=0)
@@ -430,6 +436,7 @@ class App(ctk.CTk):
                 btn.configure(fg_color="transparent", border_color="#666666", border_width=1, text_color="#444444")
 
     def add_name(self):
+        """投薬者を追加する。"""
         result = self.controller.add_name(self.name_entry.get())
         if result.get("status") != "success":
             self.log(result.get("message"))
@@ -443,7 +450,7 @@ class App(ctk.CTk):
         self._refresh_current_mode_after_name_change()
 
     def delete_name(self):
-        """投薬者の削除"""
+        """投薬者を削除する。"""
         name = self.name_entry.get().strip() or self.selected_name
         if not name:
             self.log("削除する名前が選択されていません。")
@@ -465,6 +472,7 @@ class App(ctk.CTk):
         self._refresh_current_mode_after_name_change()
 
     def rename_selected_name(self):
+        """選択中の投薬者名を変更する。"""
         current_name = (self.selected_name or "").strip()
         new_name = self.name_entry.get().strip()
 
@@ -498,18 +506,20 @@ class App(ctk.CTk):
         self._refresh_current_mode_after_name_change()
 
     def _refresh_current_mode_after_name_change(self):
+        """投薬者変更後に現在モードの内容を更新する。"""
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             self.load_dictionaries_list()
 
     # 要約・辞書関連
     def load_current_mode_items(self):
+        """現在の表示モードに対応する一覧を読み込む。"""
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             self.load_dictionaries_list()
         else:
             self.load_summaries_list()
 
     def load_summaries_list(self):
-        """要約のリストをDBから読み込む"""
+        """要約一覧を読み込む。"""
         target_date = self.date_selector.get_date_str().strip()
         name = self.selected_name
 
@@ -520,7 +530,7 @@ class App(ctk.CTk):
         self.log(f"{result.get('target_date')} | {name}の要約を読み込みました。")
 
     def load_dictionaries_list(self, preferred_label: str | None = None):
-        """選択中の投薬者に紐づく辞書のリストを読み込む"""
+        """選択中の投薬者の辞書一覧を読み込む。"""
         name = self.selected_name
         result = self.controller.load_dictionaries(name)
         self.dictionaries_dict = result.get("dictionaries_dict", {})
@@ -531,7 +541,7 @@ class App(ctk.CTk):
         self.log(f"{name}の辞書を読み込みました。")
 
     def on_selected_summary(self, selected_label: str):
-        """ドロップダウン選択時に、モードに応じた内容を表示する"""
+        """選択中の要約または辞書内容を表示する。"""
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             result = self.controller.get_dictionary_data(self.dictionaries_dict, selected_label)
             if result.get("status") != "success":
@@ -561,50 +571,62 @@ class App(ctk.CTk):
         self._render_current_view_text()
 
     def _read_summary_text_box(self) -> str:
+        """要約テキスト欄の内容を取得する。"""
         return self.summary_text_box.get("1.0", "end-1c")
 
     def _write_summary_text_box(self, text: str):
+        """要約テキスト欄へ内容を書き込む。"""
         self.summary_text_box.delete("1.0", "end")
         self.summary_text_box.insert("1.0", text or "")
 
     def _read_dictionary_title(self) -> str:
+        """辞書タイトル欄の内容を取得する。"""
         return self.dictionary_title_entry.get().strip()
 
     def _write_dictionary_title(self, text: str):
+        """辞書タイトル欄へ内容を書き込む。"""
         self.dictionary_title_entry.delete(0, "end")
         self.dictionary_title_entry.insert(0, text or "")
 
     def _read_dictionary_content_text_box(self) -> str:
+        """辞書本文欄の内容を取得する。"""
         return self.dictionary_content_text_box.get("1.0", "end-1c")
 
     def _write_dictionary_content_text_box(self, text: str):
+        """辞書本文欄へ内容を書き込む。"""
         self.dictionary_content_text_box.delete("1.0", "end")
         self.dictionary_content_text_box.insert("1.0", text or "")
 
     def _set_current_summary_data(self, summary_id: int | None, content: str, transcription: str):
+        """現在の要約データを保持する。"""
         self.current_summary_id = summary_id
         self.current_summary_content = content or ""
         self.current_summary_transcription = transcription or ""
 
     def _clear_current_summary_data(self):
+        """現在の要約データをクリアする。"""
         self.current_summary_label = ""
         self._set_current_summary_data(summary_id=None, content="", transcription="")
 
     def _set_current_dictionary_data(self, dictionary_id: int | None, title: str, content: str):
+        """現在の辞書データを保持する。"""
         self.current_dictionary_id = dictionary_id
         self.current_dictionary_title = title or ""
         self.current_dictionary_content = content or ""
 
     def _clear_current_dictionary_data(self):
+        """現在の辞書データをクリアする。"""
         self.current_dictionary_label = ""
         self._set_current_dictionary_data(dictionary_id=None, title="", content="")
 
     def _sync_view_mode_dropdown(self):
+        """表示モードのドロップダウンを同期する。"""
         if self.dropdown_summary_display_mode is None:
             return
         self.dropdown_summary_display_mode.set(self.current_view_mode)
 
     def _set_dropdown_selection(self, values: list[str], selected_label: str):
+        """ドロップダウンの候補と選択値を設定する。"""
         self.dropdown_summary.configure_values(values)
         if selected_label and selected_label in values:
             self.dropdown_summary.var.set(selected_label)
@@ -614,6 +636,7 @@ class App(ctk.CTk):
             self.dropdown_summary.var.set("")
 
     def _render_current_view_text(self):
+        """現在モードに応じた本文を画面へ反映する。"""
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             self._write_dictionary_title(self.current_dictionary_title)
             self._write_dictionary_content_text_box(self.current_dictionary_content)
@@ -621,6 +644,7 @@ class App(ctk.CTk):
             self._write_summary_text_box(self.current_summary_content)
 
     def _sync_current_view_mode(self):
+        """現在の表示モードに合わせてUIを切り替える。"""
         is_dictionary_mode = self.current_view_mode == self.VIEW_MODE_DICTIONARY
         self._sync_view_mode_dropdown()
         self.btn_load_summaries.configure(
@@ -653,6 +677,7 @@ class App(ctk.CTk):
         self._render_current_view_text()
 
     def _switch_view_mode(self, mode: str, should_reload: bool = True):
+        """表示モードを切り替え、必要なら一覧を再読み込みする。"""
         normalized_mode = (
             mode if mode in (self.VIEW_MODE_SUMMARY, self.VIEW_MODE_DICTIONARY)
             else self.VIEW_MODE_SUMMARY
@@ -664,10 +689,11 @@ class App(ctk.CTk):
             return
 
     def on_view_mode_changed(self, selected_mode: str):
+        """表示モード変更時の処理を行う。"""
         self._switch_view_mode(selected_mode, should_reload=True)
 
     def _apply_summary_result(self, summarized_text: str, summary_id: int, transcription: str):
-        """要約内容と最新IDをメインスレッドで反映する"""
+        """要約結果を画面と状態に反映する。"""
         self.current_summary_label = ""
         self._set_current_summary_data(
             summary_id=summary_id,
@@ -677,9 +703,11 @@ class App(ctk.CTk):
         self._switch_view_mode(self.VIEW_MODE_SUMMARY, should_reload=False)
 
     def _set_summary_text_box_state(self, state: str):
+        """要約テキスト欄の状態を変更する。"""
         self.summary_text_box.configure(state=state)
 
     def _apply_current_summary_selection(self):
+        """現在の要約選択状態を画面へ適用する。"""
         selected_label = self.current_summary_label if self.current_summary_label in self.summary_dropdown_values else ""
         if not selected_label and self.summary_dropdown_values:
             selected_label = self.summary_dropdown_values[0]
@@ -692,6 +720,7 @@ class App(ctk.CTk):
             self._sync_current_view_mode()
 
     def _apply_current_dictionary_selection(self):
+        """現在の辞書選択状態を画面へ適用する。"""
         selected_label = self.current_dictionary_label if self.current_dictionary_label in self.dictionary_dropdown_values else ""
         if not selected_label and self.dictionary_dropdown_values:
             selected_label = self.dictionary_dropdown_values[0]
@@ -704,6 +733,7 @@ class App(ctk.CTk):
             self._sync_current_view_mode()
 
     def _save_summary_without_log(self) -> bool:
+        """要約を保存し、成否を返す。"""
         summary_id = self.current_summary_id
         if not summary_id:
             self.log('更新対象の要約が選択されていません。')
@@ -719,6 +749,7 @@ class App(ctk.CTk):
         return True
 
     def _save_dictionary_without_log(self) -> bool:
+        """辞書を保存し、成否を返す。"""
         dictionary_id = self.current_dictionary_id
         title = self._read_dictionary_title()
         content = self._read_dictionary_content_text_box()
@@ -738,6 +769,7 @@ class App(ctk.CTk):
         return True
 
     def overwrite_save_summary(self):
+        """現在モードの内容を保存する。"""
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             if self._save_dictionary_without_log():
                 self.log('辞書を上書き保存しました。')
@@ -747,6 +779,7 @@ class App(ctk.CTk):
             self.log('上書き保存しました。')
 
     def create_dictionary(self):
+        """新しい辞書を登録する。"""
         result = self.controller.create_dictionary(
             self.selected_name,
             self._read_dictionary_title(),
@@ -761,6 +794,7 @@ class App(ctk.CTk):
         self.log(result.get("message"))
 
     def delete_dictionary(self):
+        """選択中の辞書を削除する。"""
         dictionary_id = self.current_dictionary_id
         title = self.current_dictionary_title or self._read_dictionary_title()
         if not dictionary_id:
@@ -785,7 +819,7 @@ class App(ctk.CTk):
 
     # 録音関連
     def start_recording(self):
-        """threadにて録音開始 """
+        """録音を開始する。"""
         if not self._can_use_recording():
             return
 
@@ -813,9 +847,7 @@ class App(ctk.CTk):
         self.recording_thread.start()
 
     def stop_recording(self):
-        """
-        録音停止 → Gemini キューに追加
-        """
+        """録音を停止し、Gemini処理へ渡す。"""
         if not self.is_recording:
             return
 
@@ -847,12 +879,12 @@ class App(ctk.CTk):
 
     # 録音タイマー関連
     def start_timer(self):
-        """1秒ごとに録音時間を更新するループを開始"""
+        """録音タイマーの更新を開始する。"""
         # すぐに一回実行
         self.update_record_time()
 
     def update_record_time(self):
-        """録音時間を計算してラベルに反映し、次の after を予約"""
+        """録音時間を更新し、次回更新を予約する。"""
         if not self.is_recording or self.record_start_time is None:
             return
 
@@ -872,7 +904,7 @@ class App(ctk.CTk):
         self.record_timer_id = self.after(1000, self.update_record_time)
 
     def update_timer_label(self):
-        """record_time_seconds を mm:ss 形式にして表示"""
+        """録音時間表示を更新する。"""
         sec = self.record_time_seconds
         minutes = sec // 60
         seconds = sec % 60
@@ -880,7 +912,7 @@ class App(ctk.CTk):
 
     # Gemini関連
     def _gemini_worker(self):
-        """Gemini 要約を順番に処理するワーカースレッド"""
+        """Gemini要約キューを順番に処理する。"""
         while True:
             # キューから次のファイルパスを取得（何もなければここで待機する）
             file_path = self.gemini_queue.get()
@@ -899,7 +931,7 @@ class App(ctk.CTk):
                 self.gemini_queue.task_done()
 
     def gemini_task(self, recorded_file):
-        """録音したファイルをGeminiに投げて要約する"""
+        """録音ファイルをGeminiで要約する。"""
         try:
             result = self.controller.summarize_and_save(
                 recorded_file,
@@ -925,6 +957,7 @@ class App(ctk.CTk):
 
     # 自動ペースト
     def auto_paste(self):
+        """現在モードに応じてコピーまたは自動ペーストを行う。"""
         if self.current_view_mode == self.VIEW_MODE_DICTIONARY:
             result = self.controller.copy_text(self._read_dictionary_content_text_box())
             if result.get('status') == 'success':

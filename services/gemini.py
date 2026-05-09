@@ -40,7 +40,7 @@ class Gemini:
                     self.prompt,
                     uploaded_file],
                 config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level="medium"),
+                    thinking_config=types.ThinkingConfig(thinking_level="medium")
                 )
             )
             print(response)

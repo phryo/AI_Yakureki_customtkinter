@@ -296,11 +296,11 @@ class App(ctk.CTk):
         self.summary_section_frame.grid_columnconfigure(1, weight=1)
 
         section_heights = {
-            "服薬状況": 50,
-            "副作用": 50,
+            "服薬状況": 60,
+            "副作用": 60,
             "計画": 36,
         }
-        default_section_height = 100
+        default_section_height = 120
         for row_index, (_, section_title) in enumerate(settings.setting.SECTION_MAPPING):
             section_label = ctk.CTkLabel(
                 self.summary_section_frame,
@@ -314,7 +314,7 @@ class App(ctk.CTk):
                 text="コピー",
                 height=18,
                 width=40,
-                command=lambda: self._read_a_summary_section_from_widget(section_title)
+                command=lambda title=section_title: self._copy_a_summary_section_from_widget(title)
             )
             btn_section_copy.grid(row=row_index * 2 + 1, column=0, padx=5, pady=0, sticky="new")
             self.btn_section_copy[section_title] = btn_section_copy
@@ -664,10 +664,12 @@ class App(ctk.CTk):
             parts.append(f"【{section_title}】\n{body}")
         return "\n\n".join(parts)
 
-    def _read_a_summary_section_from_widget(self, section_title: str) -> str:
-        text_box = self.summary_section_widgets[section_title]
+    def _copy_a_summary_section_from_widget(self, section_title: str) -> None:
+        text = self.summary_section_widgets[section_title].get("1.0", "end-1c").strip()
+        print(text)
         self.log(f"{section_title} をコピーしました")
-        return text_box.get("1.0", "end-1c").strip()
+        self.controller.copy_text(text)
+
 
     def _read_summary_sections_from_widgets(self) -> dict[str, str]:
         """5個の要約textboxから内容を取得する。"""

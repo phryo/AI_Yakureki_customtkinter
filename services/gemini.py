@@ -35,7 +35,7 @@ class Gemini:
         try:
             uploaded_file = self.client.files.upload(file=recorded_file)
             response = self.client.models.generate_content(
-                model='gemini-3-flash-preview',
+                model='gemini-3.1-flash-lite',
                 contents=[
                     self.prompt,
                     uploaded_file],

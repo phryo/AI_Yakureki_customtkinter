@@ -11,8 +11,11 @@ class Recorder:
     def __init__(self, stop_event: threading.Event):
         self.flames = None
         self.recording_stop_event = stop_event
+        self.recording_pause_event = threading.Event()
 
     def callback(self, indata, frames, time, status):
+        if self.recording_pause_event.is_set():
+            return
         self.flames.append(indata.copy())
 
     def recording_start(self):
@@ -27,7 +30,14 @@ class Recorder:
         except Exception as e:
             return {'error': str(e)}
 
+    def recording_pause(self):
+        self.recording_pause_event.set()
+
+    def recording_resume(self):
+        self.recording_pause_event.clear()
+
     def recording_stop(self):
+        self.recording_pause_event.clear()
         if self.flames:
             recording_data = np.concatenate(self.flames, axis=0)
             sf.write(WAVE_OUTPUT_FILENAME, recording_data, SAMPLERATE)
@@ -37,4 +47,3 @@ class Recorder:
         else:
             return {'status': 'error',
                     'message': 'No recording'}
-

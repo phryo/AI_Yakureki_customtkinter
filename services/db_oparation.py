@@ -324,6 +324,6 @@ class DBOperator:
     def overwrite_save_summary(self, summary_id, content: str) -> None:
         """修正した後の要約を更新して保存"""
         self._execute_with_retry(
-            "UPDATE summaries SET content = ? where id = ?;",
+            "UPDATE summaries SET content = ? WHERE id = ?;",
             (content, summary_id)
         )

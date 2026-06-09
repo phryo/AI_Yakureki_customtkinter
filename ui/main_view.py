@@ -30,11 +30,13 @@ class App(ctk.CTk):
         self.bind("<F1>", self.on_f1)
 
         self.is_recording = False
+        self.is_recording_paused = False
         self.recording_thread = None
         self.recording_stop_event = threading.Event()
         self.recorder = Recorder(self.recording_stop_event)
 
         self.record_start_time = None
+        self.record_elapsed_seconds = 0.0
         self.record_time_seconds = 0
         self.record_timer_id = None
         self.max_record_seconds = settings.setting.MAX_RECORDING_SECONDS
@@ -131,7 +133,7 @@ class App(ctk.CTk):
             hover_color="#144870",
             text_color="white",
             font=("Arial", 15, "bold"),
-            command=self.start_recording,
+            command=self.toggle_recording,
             width=100, height=40
         )
         self.btn_record_start.grid(row=0, column=0, padx=5, pady=5, sticky="w")
@@ -139,7 +141,7 @@ class App(ctk.CTk):
         # 録音停止ボタン
         self.btn_record_stop = ctk.CTkButton(
             self.frame_btn_recorder,
-            text="停止(F1)",
+            text="停止",
             state="disabled",
             font=("Arial", 15, "bold"),
             command=self.stop_recording,
@@ -452,11 +454,13 @@ class App(ctk.CTk):
 
 
     def toggle_recording(self):
-        """録音の開始と停止を切り替える。"""
-        if self.is_recording:
-            self.stop_recording()
-        else:
+        """録音の開始、一時停止、再開を切り替える。"""
+        if not self.is_recording:
             self.start_recording()
+        elif self.is_recording_paused:
+            self.resume_recording()
+        else:
+            self.pause_recording()
 
     # ログ表示
     def log(self, text: str):
@@ -943,16 +947,22 @@ class App(ctk.CTk):
 
         self.log('録音を開始します。')
         self.is_recording = True
+        self.is_recording_paused = False
         self.recording_stop_event.clear()
+        self.recorder.recording_resume()
 
         self.record_start_time = time.time()
+        self.record_elapsed_seconds = 0.0
         self.record_time_seconds = 0
         self.update_timer_label()
         self.start_timer()
 
-        self.btn_record_start.configure(state='disabled',
-                                        text="録音中...",
-                                        )
+        self.btn_record_start.configure(
+            state='normal',
+            text="録音中...",
+            fg_color="#1f6aa5",
+            hover_color="#144870",
+        )
         self.lbl_timer.configure(fg_color="#fff799")
         self.btn_record_stop.configure(state='normal')
 
@@ -961,13 +971,53 @@ class App(ctk.CTk):
             daemon=True)
         self.recording_thread.start()
 
+    def pause_recording(self):
+        """録音を一時停止する。"""
+        if not self.is_recording or self.is_recording_paused:
+            return
+
+        self._store_current_recording_time()
+        self._cancel_record_timer()
+        self.recorder.recording_pause()
+        self.is_recording_paused = True
+
+        self.log('録音を一時停止しました。')
+        self.btn_record_start.configure(
+            text="一時停止中",
+            fg_color="#c42b1c",
+            hover_color="#8f1f15",
+        )
+
+    def resume_recording(self):
+        """一時停止していた録音を再開する。"""
+        if not self.is_recording or not self.is_recording_paused:
+            return
+
+        self.recorder.recording_resume()
+        self.is_recording_paused = False
+        self.record_start_time = time.time()
+
+        self.log('録音を再開しました。')
+        self.btn_record_start.configure(
+            text="録音中...",
+            fg_color="#1f6aa5",
+            hover_color="#144870",
+        )
+        self.start_timer()
+
     def stop_recording(self):
         """録音を停止し、Gemini処理へ渡す。"""
         if not self.is_recording:
             return
 
+        if not self.is_recording_paused:
+            self._store_current_recording_time()
+        self._cancel_record_timer()
+
         self.log('録音を停止しました。')
         self.is_recording = False
+        self.is_recording_paused = False
+        self.record_start_time = None
 
         self.lbl_timer.configure(text='00:00')
 
@@ -979,11 +1029,14 @@ class App(ctk.CTk):
             self.recording_thread = None
 
         self.btn_record_stop.configure(state='disabled')
-        self.btn_record_start.configure(state='normal',
-                                        text="録音(F1)",
-                                        )
+        self.btn_record_start.configure(
+            state='normal',
+            text="録音(F1)",
+            fg_color="#1f6aa5",
+            hover_color="#144870",
+        )
         self.lbl_timer.configure(fg_color="transparent")
-        recorded_file = self.recorder.recording_stop() # stop_event をここで使わないなら引数無しにしてもOK
+        recorded_file = self.recorder.recording_stop()
 
         if recorded_file.get('status') == 'success':
             file_path = recorded_file.get('file_path')
@@ -995,28 +1048,46 @@ class App(ctk.CTk):
     # 録音タイマー関連
     def start_timer(self):
         """録音タイマーの更新を開始する。"""
-        # すぐに一回実行
+        self._cancel_record_timer()
         self.update_record_time()
 
     def update_record_time(self):
         """録音時間を更新し、次回更新を予約する。"""
-        if not self.is_recording or self.record_start_time is None:
+        self.record_timer_id = None
+        if (not self.is_recording or self.is_recording_paused
+                or self.record_start_time is None):
             return
 
-        now = time.time()
-        self.record_time_seconds = int(now - self.record_start_time)
+        self.record_time_seconds = int(
+            self.record_elapsed_seconds + time.time() - self.record_start_time
+        )
 
-        # ラベル更新
         self.update_timer_label()
 
-        # 🎯 タイムアウト機能（必要なら）
         if 0 < self.max_record_seconds <= self.record_time_seconds:
             self.log("タイムアウトにより録音停止")
             self.stop_recording()
             return
 
-        # 1秒後にまた呼ぶ
         self.record_timer_id = self.after(1000, self.update_record_time)
+
+    def _store_current_recording_time(self):
+        """現在の録音区間を累積時間へ加算する。"""
+        if self.record_start_time is None:
+            return
+
+        self.record_elapsed_seconds += time.time() - self.record_start_time
+        self.record_start_time = None
+        self.record_time_seconds = int(self.record_elapsed_seconds)
+        self.update_timer_label()
+
+    def _cancel_record_timer(self):
+        """予約済みの録音タイマー更新を解除する。"""
+        if self.record_timer_id is None:
+            return
+
+        self.after_cancel(self.record_timer_id)
+        self.record_timer_id = None
 
     def update_timer_label(self):
         """録音時間表示を更新する。"""
